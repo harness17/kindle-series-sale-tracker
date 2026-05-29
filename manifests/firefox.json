@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Kindle Series Sale Tracker",
+  "version": "0.1.0",
+  "description": "Amazon.co.jp のKindle蔵書からシリーズ候補を抽出し、続刊確認用リストを作ります。",
+  "permissions": ["activeTab", "storage"],
+  "host_permissions": ["https://www.amazon.co.jp/*"],
+  "options_page": "options/options.html",
+  "action": {
+    "default_title": "Kindle Series Sale Tracker",
+    "default_popup": "popup/popup.html"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.amazon.co.jp/hz/mycd/digital-console/contentlist/booksAll*"],
+      "js": ["shared/kindle-library.js", "content/content.js"],
+      "css": ["content/content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "kindle-series-sale-tracker@harness"
+    }
+  }
+}

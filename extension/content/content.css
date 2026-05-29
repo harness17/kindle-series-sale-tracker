@@ -1,0 +1,44 @@
+#kst-scan-banner {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147483647;
+  width: min(320px, calc(100vw - 32px));
+  padding: 12px 14px;
+  border: 1px solid #b8c2cc;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1f2933;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
+  font-family: Arial, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+#kst-scan-banner strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+#kst-scan-banner .kst-progress {
+  height: 8px;
+  margin: 8px 0 6px;
+  border-radius: 999px;
+  background: #e4e7eb;
+  overflow: hidden;
+}
+
+#kst-scan-banner .kst-progress-fill {
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2f80ed, #56ccf2);
+  transition: width 0.25s ease;
+}
+
+#kst-scan-banner .kst-detail {
+  display: block;
+  font-variant-numeric: tabular-nums;
+  color: #52606d;
+}

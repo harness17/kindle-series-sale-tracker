@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Kindle Series Sale Tracker</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="header">
+        <h1>Kindle Series</h1>
+        <p id="summary">未スキャン</p>
+      </header>
+
+      <section class="toolbar" aria-label="操作">
+        <button id="openLibrary" type="button">Kindle一覧を開く</button>
+        <button id="scanPage" type="button">このページをスキャン</button>
+        <button id="exportCsv" type="button">CSV</button>
+        <button id="exportJson" type="button">JSON</button>
+      </section>
+
+      <section class="toolbar" aria-label="一覧">
+        <button id="openFullPage" type="button">全シリーズを専用ページで開く</button>
+      </section>
+
+      <p id="status" class="status" role="status"></p>
+
+      <section>
+        <h2>シリーズ候補</h2>
+        <div id="seriesList" class="series-list"></div>
+      </section>
+    </main>
+
+    <script src="../shared/kindle-library.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

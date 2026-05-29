@@ -1,0 +1,166 @@
+:root {
+  color-scheme: light dark;
+  --fg: #1a1a1a;
+  --muted: #666;
+  --line: #e0e0e0;
+  --accent: #0b7;
+  --warn: #c0392b;
+  --bg: #fff;
+  --card: #fafafa;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+  color: var(--fg);
+  background: var(--bg);
+}
+
+.topbar {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 2;
+}
+
+.topbar h1 {
+  font-size: 18px;
+  margin: 0;
+}
+
+.summary {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 53px;
+  background: var(--bg);
+  z-index: 1;
+}
+
+.controls input[type="search"] {
+  flex: 1 1 260px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.controls label {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.controls .check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+button {
+  font: inherit;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+
+button.secondary {
+  background: transparent;
+  color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.list {
+  padding: 12px 24px 48px;
+  display: grid;
+  gap: 8px;
+}
+
+.series {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 14px;
+  background: var(--card);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 16px;
+  align-items: center;
+}
+
+.series .title {
+  font-weight: 600;
+}
+
+.series .meta {
+  grid-column: 1 / -1;
+  font-size: 13px;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.badge {
+  font-size: 12px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #eee;
+  color: #333;
+}
+
+.badge.missing {
+  background: #fdecea;
+  color: var(--warn);
+}
+
+.badge.next {
+  background: #e7f7f1;
+  color: #066;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.actions a {
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.next-result {
+  font-size: 13px;
+}
+
+.empty {
+  color: var(--muted);
+  padding: 24px;
+  text-align: center;
+}

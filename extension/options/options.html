@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kindle シリーズ続刊トラッカー</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>Kindle シリーズ続刊トラッカー</h1>
+      <div id="summary" class="summary">読み込み中…</div>
+    </header>
+
+    <section class="controls">
+      <input id="search" type="search" placeholder="シリーズ名・著者で絞り込み" />
+      <label>並び替え
+        <select id="sort">
+          <option value="count">所有冊数（多い順）</option>
+          <option value="volume">最高巻（大きい順）</option>
+          <option value="title">タイトル（あいうえお順）</option>
+        </select>
+      </label>
+      <label class="check"><input id="filterMissing" type="checkbox" /> 欠番ありのみ</label>
+      <label class="check"><input id="filterNext" type="checkbox" /> 続刊ありのみ（照会済み）</label>
+      <button id="checkVisible" type="button" class="secondary">表示中を一括照会</button>
+    </section>
+
+    <main id="list" class="list"></main>
+
+    <script src="../shared/kindle-library.js"></script>
+    <script src="../shared/catalog-probe.js"></script>
+    <script src="options.js"></script>
+  </body>
+</html>

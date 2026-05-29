@@ -1,0 +1,40 @@
+{
+  "success": true,
+  "GetContentOwnershipData": {
+    "numberOfItems": 4,
+    "items": [
+      {
+        "title": "サンプル冒険譚（１）",
+        "authors": ["山田 太郎"],
+        "acquiredTime": 1714550400000,
+        "readStatus": "READ",
+        "asin": "B000000001",
+        "productImage": "https://example.invalid/1.jpg"
+      },
+      {
+        "title": "サンプル冒険譚（２）",
+        "authors": ["山田 太郎"],
+        "acquiredTime": 1714636800000,
+        "readStatus": "READING",
+        "asin": "B000000002",
+        "productImage": "https://example.invalid/2.jpg"
+      },
+      {
+        "title": "別シリーズ 1巻",
+        "authors": "佐藤 花子",
+        "acquiredTime": 1714723200000,
+        "readStatus": "UNREAD",
+        "asin": "B000000003",
+        "productImage": "https://example.invalid/3.jpg"
+      },
+      {
+        "title": "単巻読み切り",
+        "authors": "佐藤 花子",
+        "acquiredTime": 1714809600000,
+        "readStatus": "READ",
+        "asin": "B000000004",
+        "productImage": "https://example.invalid/4.jpg"
+      }
+    ]
+  }
+}
