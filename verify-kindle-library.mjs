@@ -58,6 +58,39 @@ const duplicatedAsin = buildSeriesSummary([
   { title: 'ゾンビ屋れい子 2', authors: ['三家本礼'], asin: 'Z2' },
 ]).find((g) => g.title === 'ゾンビ屋れい子');
 
+// 複数版（レーベル）所有: 同じ巻番号が別レーベルで重複する場合は版ごとに分割する。
+// 私の少年: アクションコミックス 1-4 と ヤングマガジンコミックス 1,5,7（1巻が重複）。
+const multiImprint = buildSeriesSummary([
+  { title: '私の少年（1） (ヤングマガジンコミックス)', authors: ['高野ひと深'], asin: 'WY1' },
+  { title: '私の少年（5） (ヤングマガジンコミックス)', authors: ['高野ひと深'], asin: 'WY5' },
+  { title: '私の少年（7） (ヤングマガジンコミックス)', authors: ['高野ひと深'], asin: 'WY7' },
+  { title: '私の少年 : 1 (アクションコミックス)', authors: ['高野ひと深'], asin: 'WA1' },
+  { title: '私の少年 : 2 (アクションコミックス)', authors: ['高野ひと深'], asin: 'WA2' },
+  { title: '私の少年 : 3 (アクションコミックス)', authors: ['高野ひと深'], asin: 'WA3' },
+  { title: '私の少年 : 4 【電子コミック限定特典（カラーイラスト）付き】 (アクションコミックス)', authors: ['高野ひと深'], asin: 'WA4' },
+]);
+const myBoyAction = multiImprint.find((g) => g.title === '私の少年（アクションコミックス）');
+const myBoyYM = multiImprint.find((g) => g.title === '私の少年（ヤングマガジンコミックス）');
+
+// 単一レーベル内で同じ巻番号が重複（特装版）するだけのケースは分割しない。
+// つぐもも: 24巻が通常版と【カバーイラストBOOK付】で重複するが、版は1種類。
+const sameImprintDup = buildSeriesSummary([
+  { title: 'つぐもも : 23 (アクションコミックス)', authors: ['浜田よしかづ'], asin: 'TG23' },
+  { title: 'つぐもも : 24 (アクションコミックス)', authors: ['浜田よしかづ'], asin: 'TG24a' },
+  { title: 'つぐもも : 24 【カバーイラストBOOK付】 (アクションコミックス)', authors: ['浜田よしかづ'], asin: 'TG24b' },
+  { title: 'つぐもも : 25 (アクションコミックス)', authors: ['浜田よしかづ'], asin: 'TG25' },
+]).filter((g) => g.title.startsWith('つぐもも'));
+
+// レーベル改称（版名は2種だが巻番号は連続して重複しない）は分割しない。
+// 例: ヤングアニマル→ジェッツへ改称しつつ巻番号は1..6で連続。
+const renamedImprint = buildSeriesSummary([
+  { title: '3月のライオン 1 (ヤングアニマルコミックス)', authors: ['羽海野チカ'], asin: 'SL1' },
+  { title: '3月のライオン 2 (ヤングアニマルコミックス)', authors: ['羽海野チカ'], asin: 'SL2' },
+  { title: '3月のライオン 3 (ヤングアニマルコミックス)', authors: ['羽海野チカ'], asin: 'SL3' },
+  { title: '3月のライオン 4 (ジェッツコミックス)', authors: ['羽海野チカ'], asin: 'SL4' },
+  { title: '3月のライオン 5 (ジェッツコミックス)', authors: ['羽海野チカ'], asin: 'SL5' },
+]).filter((g) => g.title.startsWith('3月のライオン'));
+
 const checks = [
   {
     name: 'ownership response から4冊を抽出できる',
@@ -164,6 +197,41 @@ const checks = [
     ok:
       computeMissingVolumes([1, 2, 3]).length === 0 &&
       computeMissingVolumes([5]).length === 0,
+  },
+  {
+    name: '複数版所有（巻番号重複×2レーベル）は版ごとに分割する',
+    ok:
+      !!myBoyAction &&
+      !!myBoyYM &&
+      JSON.stringify(myBoyAction.ownedVolumes) === JSON.stringify([1, 2, 3, 4]) &&
+      JSON.stringify(myBoyYM.ownedVolumes) === JSON.stringify([1, 5, 7]) &&
+      myBoyAction.key === '私の少年::アクションコミックス',
+  },
+  {
+    name: '分割後のアクション版は欠番なし（合算による誤検知6を出さない）',
+    ok: !!myBoyAction && computeMissingVolumes(myBoyAction.ownedVolumes).length === 0,
+  },
+  {
+    name: '単一レーベル内の特装版重複（つぐもも24）は分割しない',
+    ok:
+      sameImprintDup.length === 1 &&
+      sameImprintDup[0].title === 'つぐもも' &&
+      JSON.stringify(sameImprintDup[0].ownedVolumes) === JSON.stringify([23, 24, 25]),
+  },
+  {
+    name: 'レーベル改称（巻番号が重複しない2レーベル）は分割しない',
+    ok:
+      renamedImprint.length === 1 &&
+      renamedImprint[0].title === '3月のライオン' &&
+      JSON.stringify(renamedImprint[0].ownedVolumes) === JSON.stringify([1, 2, 3, 4, 5]),
+  },
+  {
+    name: '巻数の括弧（私の少年（1））を版名と誤抽出しない',
+    ok: splitSeriesAndVolume('私の少年（1） (ヤングマガジンコミックス)').imprint === 'ヤングマガジンコミックス',
+  },
+  {
+    name: '末尾が巻数だけの括弧（MOONLIGHT MILE(19)）は版名にしない',
+    ok: splitSeriesAndVolume('MOONLIGHT MILE(19)').imprint === '',
   },
 ];
 
