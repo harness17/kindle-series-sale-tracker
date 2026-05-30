@@ -234,6 +234,7 @@
       return catalog.detectNextVolume(results, {
         seriesTitle: s.title,
         highestVolume: s.highestVolume,
+        ownedImprint: s.imprint,
       });
     } catch (error) {
       return { status: 'unknown' };

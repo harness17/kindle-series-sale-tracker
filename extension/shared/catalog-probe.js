@@ -17,13 +17,29 @@
     return na !== '' && na === nb;
   }
 
+  // 単話版・分冊版（1話ずつの配信）を見分ける。所有しているのは単行本（巻）なので、
+  // 話数で連番が進む単話版を「続刊」として出すと、完結済み作品でも延々と続刊扱いになる。
+  // 【単話版】は stripNoise で seriesKey から消えるため、必ず加工前の raw title で判定する。
+  // 例:「Ｌｖ１魔王とワンルーム勇者【単話版】 ７１ (ＦＵＺコミックス)」を除外。
+  function isSplitVolumeEdition(rawTitle) {
+    return /単話|分冊|話売り/.test(String(rawTitle || ''));
+  }
+
+  // 所有している版（レーベル）と別レーベルの候補は、同じ作品の「別エディション」
+  // （新装版・愛蔵版など）なので続刊扱いしない。判定は両方に版名があり、かつ異なるときだけ。
+  // 片方でも版名が空なら（情報不足）従来どおり拾う＝ミッドランでの改称取りこぼしを最小化する。
+  // 例: 所有「MFコミックス フラッパーシリーズ」に対し「エリア88 14 (マンガの金字塔)」を除外。
+  function isDifferentImprint(ownedImprint, candidateImprint) {
+    return Boolean(ownedImprint) && Boolean(candidateImprint) && ownedImprint !== candidateImprint;
+  }
+
   // 検索結果 [{title,url}] から、同一シリーズで highestVolume より先の最小巻を探す。
   // 返り値:
   //   { status:'has-next', nextVolume, nextTitle, nextUrl } 続刊あり
   //   { status:'no-next' }   同一シリーズの続刊が見つからない（完結/最新所有の可能性）
   //   { status:'unknown' }   結果なし/解析不能
   function detectNextVolume(results, options) {
-    const { seriesTitle, highestVolume } = options || {};
+    const { seriesTitle, highestVolume, ownedImprint } = options || {};
     if (!Array.isArray(results) || results.length === 0) {
       return { status: 'unknown' };
     }
@@ -38,6 +54,9 @@
       if (!Number.isFinite(parsed.volume)) continue;
       if (parsed.volume <= highestVolume) continue;
       if (!sameSeries(parsed.seriesKey, targetKey)) continue;
+      // 別エディション（別レーベルの新装版／単話・分冊版）は続刊として出さない。
+      if (isSplitVolumeEdition(r.title)) continue;
+      if (isDifferentImprint(ownedImprint, parsed.imprint)) continue;
       if (best === null || parsed.volume < best.volume) {
         best = { volume: parsed.volume, title: r.title, url: r.url };
       }

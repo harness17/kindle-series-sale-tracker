@@ -193,6 +193,25 @@
     return best;
   }
 
+  // グループ内で最頻の版（レーベル）名を表示・続刊照合用に選ぶ。空（版名なし）は数えない。
+  // 続刊照会で「所有している版と別レーベルの新装版」を続刊と誤認しないための基準値になる。
+  function mostCommonImprint(books) {
+    const counts = new Map();
+    for (const book of books) {
+      if (!book.imprint) continue;
+      counts.set(book.imprint, (counts.get(book.imprint) || 0) + 1);
+    }
+    let best = '';
+    let bestCount = 0;
+    for (const [imprint, count] of counts) {
+      if (count > bestCount) {
+        best = imprint;
+        bestCount = count;
+      }
+    }
+    return best;
+  }
+
   // 同一作品を複数の版（レーベル）で所有しているグループを版ごとに分割する。
   // 分割するのは「同じ巻番号が2冊以上ある（＝別版が重なっている確証）」かつ
   // 「2種以上の版名がある」かつ「全冊が版名を持つ」場合だけ。
@@ -267,6 +286,7 @@
         .sort((a, b) => a - b);
       const highestVolume = volumes.length ? volumes[volumes.length - 1] : null;
       const author = mostCommonAuthor(group.books);
+      const imprint = mostCommonImprint(group.books);
       const query = encodeURIComponent(
         `${group.title} ${author ? `${author} ` : ''}Kindle`
       );
@@ -275,6 +295,7 @@
         key: group.key,
         title: group.title,
         author,
+        imprint,
         count: group.books.length,
         ownedVolumes: Array.from(new Set(volumes)),
         highestVolume,
