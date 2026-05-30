@@ -32,6 +32,7 @@
 
   function stripNoise(text) {
     return normalizeText(text)
+      .replace(/【[^】]*】/g, '') // 【電子版】【特典付き】等の版表記
       .replace(/\bkindle版\b/gi, '')
       .replace(/\b電子書籍\b/g, '')
       .replace(/\s+/g, ' ')
@@ -61,8 +62,9 @@
 
     // 弱い巻マーカー: 空白区切りの裸数字。先頭の数字（1Q84 / 20世紀少年 等）を
     // 巻数扱いしないよう、直前にシリーズ名（非空白）がある最初のトークンに限定する。
+    // 数字の直後は空白/文末だけでなく括弧（11【…】 / 5(…) 等）も許可する。
     if (marker === null) {
-      const match = title.match(/^(.*?\S)\s+(\d{1,3})(?:\s|$)/);
+      const match = title.match(/^(.*?\S)\s+(\d{1,3})(?=\s|$|[【（(\[「『])/);
       if (match) {
         marker = { headLen: match[1].length, volume: Number(match[2]) };
       }

@@ -8,6 +8,7 @@ const {
   toCsv,
   computeOwnedRanges,
   computeMissingVolumes,
+  splitSeriesAndVolume,
 } = require('./extension/shared/kindle-library.js');
 
 const payload = JSON.parse(readFileSync('fixtures/ownership-response.json', 'utf8'));
@@ -30,6 +31,12 @@ const subtitle = summarize([
   '転生賢者の異世界ライフ 2 ～第二の職業を得て、世界最強になりました～',
 ]);
 const mixedNotation = summarize(['進撃の巨人（1）', '進撃の巨人 2', '進撃の巨人（3）']);
+// 巻数の直後が空白でなく【】等の括弧でも巻数を認識し、同一シリーズに束ねる
+const bracketAfterVolume = summarize([
+  '小林さんちのメイドラゴン : 10 (アクションコミックス)',
+  '小林さんちのメイドラゴン : 11【電子版は水着回がフルカラーだよ】 (アクションコミックス)',
+  '小林さんちのメイドラゴン : 12 (アクションコミックス)',
+]);
 const leadingNumber = summarize(['1Q84', '20世紀少年']);
 const differentSeries = summarize(['シリーズX 1', 'シリーズY 1']);
 
@@ -95,6 +102,23 @@ const checks = [
   {
     name: '混在表記（進撃の巨人（1）+ 進撃の巨人 2）を統合する',
     ok: mixedNotation.size === 1 && mixedNotation.get('進撃の巨人')?.count === 3,
+  },
+  {
+    name: '巻数直後が【】等の括弧でも巻数を認識する',
+    ok: (() => {
+      const r = splitSeriesAndVolume(
+        '小林さんちのメイドラゴン : 11【電子版は水着回がフルカラーだよ】 (アクションコミックス)'
+      );
+      return r.volume === 11 && r.seriesKey === '小林さんちのメイドラゴン';
+    })(),
+  },
+  {
+    name: '巻数直後の括弧違いで同一シリーズが分裂しない（欠番誤検知の防止）',
+    ok:
+      bracketAfterVolume.size === 1 &&
+      bracketAfterVolume.get('小林さんちのメイドラゴン')?.count === 3 &&
+      JSON.stringify(bracketAfterVolume.get('小林さんちのメイドラゴン')?.ownedVolumes) ===
+        JSON.stringify([10, 11, 12]),
   },
   {
     name: '先頭の数字（1Q84 / 20世紀少年）を巻数扱いしない',
