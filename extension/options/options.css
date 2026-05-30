@@ -143,6 +143,15 @@ button:disabled {
   color: #066;
 }
 
+.badge.completed {
+  background: #ecebff;
+  color: #44d;
+}
+
+.series.completed {
+  opacity: 0.6;
+}
+
 .actions {
   display: flex;
   gap: 8px;

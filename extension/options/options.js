@@ -4,6 +4,7 @@
   const api = window.__KST__;
   const catalog = window.__KST_CATALOG__;
   const CACHE_KEY = 'kstCatalogCache';
+  const COMPLETED_KEY = 'kstCompletedSeries'; // 手動の完結フラグ { [seriesKey]: true }
   const REQUEST_DELAY_MS = 350; // 一括照会の間隔（throttle/403 回避）
   const BULK_LIMIT = 50; // 一括照会の安全上限（誤って数千件叩かないため）
 
@@ -13,25 +14,32 @@
     sort: document.getElementById('sort'),
     filterMissing: document.getElementById('filterMissing'),
     filterNext: document.getElementById('filterNext'),
+    filterHideCompleted: document.getElementById('filterHideCompleted'),
     checkVisible: document.getElementById('checkVisible'),
+    clearCache: document.getElementById('clearCache'),
+    clearScan: document.getElementById('clearScan'),
     list: document.getElementById('list'),
   };
 
   let series = []; // 表示用ビューモデル（ownedRanges / missing を付与）
   let cache = {}; // seriesKey -> { status, nextVolume, nextTitle, nextUrl, checkedAt }
+  let completed = {}; // seriesKey -> true（手動完結フラグ）
+  let baseSummary = ''; // クリア後などに戻す件数表示
 
   function formatRanges(ranges) {
     return ranges.map(([a, b]) => (a === b ? `${a}` : `${a}-${b}`)).join(', ');
   }
 
   async function load() {
-    const data = await chrome.storage.local.get([api.STORAGE_KEY, CACHE_KEY]);
+    const data = await chrome.storage.local.get([api.STORAGE_KEY, CACHE_KEY, COMPLETED_KEY]);
     const scan = data[api.STORAGE_KEY];
     cache = data[CACHE_KEY] || {};
+    completed = data[COMPLETED_KEY] || {};
 
     if (!scan || !Array.isArray(scan.series)) {
-      els.summary.textContent =
-        '未スキャンです。Amazon の Kindle 一覧ページでスキャンしてください。';
+      series = [];
+      baseSummary = '未スキャンです。Amazon の Kindle 一覧ページでスキャンしてください。';
+      els.summary.textContent = baseSummary;
       render();
       return;
     }
@@ -43,7 +51,8 @@
     }));
 
     const total = scan.totalItems ?? (scan.items ? scan.items.length : 0);
-    els.summary.textContent = `${total}冊 / ${series.length}シリーズ`;
+    baseSummary = `${total}冊 / ${series.length}シリーズ`;
+    els.summary.textContent = baseSummary;
     render();
   }
 
@@ -51,7 +60,11 @@
     const q = els.search.value.trim();
     if (q && !`${s.title} ${s.author || ''}`.includes(q)) return false;
     if (els.filterMissing.checked && s.missing.length === 0) return false;
-    if (els.filterNext.checked && cache[s.key]?.status !== 'has-next') return false;
+    // 完結扱い（手動）は続刊が出ないので「続刊ありのみ」からは除外する。
+    if (els.filterNext.checked && (completed[s.key] || cache[s.key]?.status !== 'has-next')) {
+      return false;
+    }
+    if (els.filterHideCompleted.checked && completed[s.key]) return false;
     return true;
   }
 
@@ -91,6 +104,7 @@
   function rowEl(s) {
     const row = document.createElement('article');
     row.className = 'series';
+    if (completed[s.key]) row.classList.add('completed');
 
     const title = document.createElement('div');
     title.className = 'title';
@@ -103,9 +117,17 @@
     const checkBtn = document.createElement('button');
     checkBtn.type = 'button';
     checkBtn.className = 'secondary';
-    checkBtn.textContent = '次巻を確認';
+    checkBtn.textContent = cache[s.key] ? '再確認' : '次巻を確認';
+    checkBtn.disabled = !!completed[s.key]; // 完結なら照会不要
     checkBtn.addEventListener('click', () => checkNext(s, row, checkBtn));
     actions.appendChild(checkBtn);
+
+    const completeBtn = document.createElement('button');
+    completeBtn.type = 'button';
+    completeBtn.className = 'secondary';
+    completeBtn.textContent = completed[s.key] ? '完結解除' : '完結にする';
+    completeBtn.addEventListener('click', () => toggleCompleted(s));
+    actions.appendChild(completeBtn);
 
     const searchLink = document.createElement('a');
     searchLink.href = s.searchUrl;
@@ -136,13 +158,31 @@
       meta.appendChild(miss);
     }
 
-    const nextResult = document.createElement('span');
-    nextResult.className = 'next-result';
-    renderNextResult(nextResult, cache[s.key]);
-    meta.appendChild(nextResult);
+    if (completed[s.key]) {
+      // 手動完結は最優先表示（続刊照会の自動判定とは区別）。
+      const done = document.createElement('span');
+      done.className = 'badge completed';
+      done.textContent = '完結';
+      meta.appendChild(done);
+    } else {
+      const nextResult = document.createElement('span');
+      nextResult.className = 'next-result';
+      renderNextResult(nextResult, cache[s.key]);
+      meta.appendChild(nextResult);
+    }
 
     row.appendChild(meta);
     return row;
+  }
+
+  async function toggleCompleted(s) {
+    if (completed[s.key]) {
+      delete completed[s.key];
+    } else {
+      completed[s.key] = true;
+    }
+    await chrome.storage.local.set({ [COMPLETED_KEY]: completed });
+    render();
   }
 
   function renderNextResult(el, cached) {
@@ -164,7 +204,7 @@
         el.appendChild(a);
       }
     } else if (cached.status === 'no-next') {
-      el.textContent = '続刊なし（完結/最新所有）';
+      el.textContent = '続刊なし（自動判定）';
     } else {
       el.textContent = '判定不能';
     }
@@ -208,7 +248,7 @@
 
   async function checkVisible() {
     const targets = currentList()
-      .filter((s) => !cache[s.key])
+      .filter((s) => !cache[s.key] && !completed[s.key]) // 未照会かつ未完結のみ
       .slice(0, BULK_LIMIT);
     if (targets.length === 0) return;
 
@@ -229,11 +269,27 @@
     els.summary.textContent = msg;
   }
 
+  async function clearCache() {
+    cache = {};
+    await chrome.storage.local.remove(CACHE_KEY);
+    render();
+    els.summary.textContent = `照会キャッシュをクリアしました ／ ${baseSummary}`;
+  }
+
+  async function clearScan() {
+    await chrome.storage.local.remove([api.STORAGE_KEY, api.PROGRESS_KEY]);
+    await load();
+    els.summary.textContent = `スキャン結果をクリアしました。再スキャンしてください。`;
+  }
+
   els.search.addEventListener('input', render);
   els.sort.addEventListener('change', render);
   els.filterMissing.addEventListener('change', render);
   els.filterNext.addEventListener('change', render);
+  els.filterHideCompleted.addEventListener('change', render);
   els.checkVisible.addEventListener('click', checkVisible);
+  els.clearCache.addEventListener('click', clearCache);
+  els.clearScan.addEventListener('click', clearScan);
 
   load();
 })();

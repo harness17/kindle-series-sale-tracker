@@ -23,7 +23,14 @@
       </label>
       <label class="check"><input id="filterMissing" type="checkbox" /> 欠番ありのみ</label>
       <label class="check"><input id="filterNext" type="checkbox" /> 続刊ありのみ（照会済み）</label>
+      <label class="check"><input id="filterHideCompleted" type="checkbox" /> 完結を隠す</label>
       <button id="checkVisible" type="button" class="secondary">表示中を一括照会</button>
+    </section>
+
+    <section class="controls">
+      <button id="clearCache" type="button" class="secondary">照会キャッシュをクリア</button>
+      <button id="clearScan" type="button" class="secondary">スキャン結果をクリア</button>
+      <span class="summary">※完結フラグは保持されます</span>
     </section>
 
     <main id="list" class="list"></main>
