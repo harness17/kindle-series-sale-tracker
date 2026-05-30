@@ -7,13 +7,14 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function (kdl) {
   'use strict';
 
-  // 正規化シリーズ名どうしが同一シリーズか緩く判定する。
+  // 同一シリーズ判定は正規化 seriesKey の完全一致のみ。
+  // 部分一致にすると「小林さんちのメイドラゴン」が「…エルマのＯＬ日記」等の
+  // スピンオフを同一シリーズと誤判定して続刊照合がごっちゃになるため避ける。
   function sameSeries(a, b) {
     if (!a || !b) return false;
     const na = String(a).replace(/\s+/g, '');
     const nb = String(b).replace(/\s+/g, '');
-    if (!na || !nb) return false;
-    return na === nb || na.includes(nb) || nb.includes(na);
+    return na !== '' && na === nb;
   }
 
   // 検索結果 [{title,url}] から、同一シリーズで highestVolume より先の最小巻を探す。

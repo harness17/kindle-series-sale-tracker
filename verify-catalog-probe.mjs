@@ -43,6 +43,33 @@ const checks = [
       detectNextVolume([], { seriesTitle: '鬼滅の刃', highestVolume: 11 }).status ===
       'unknown',
   },
+  {
+    name: 'スピンオフの続刊チェックで本編・他スピンオフを拾わない',
+    ok: (() => {
+      const r = detectNextVolume(
+        [
+          { title: '小林さんちのメイドラゴン 8', url: 'main8' },
+          { title: '小林さんちのメイドラゴン カンナの日常 8', url: 'kanna8' },
+          { title: '小林さんちのメイドラゴン エルマのＯＬ日記 8', url: 'elma8' },
+        ],
+        { seriesTitle: '小林さんちのメイドラゴン エルマのＯＬ日記', highestVolume: 7 }
+      );
+      return r.status === 'has-next' && r.nextVolume === 8 && r.nextUrl === 'elma8';
+    })(),
+  },
+  {
+    name: '本編の続刊チェックでスピンオフを拾わない',
+    ok: (() => {
+      const r = detectNextVolume(
+        [
+          { title: '小林さんちのメイドラゴン カンナの日常 19', url: 'kanna19' },
+          { title: '小林さんちのメイドラゴン 19', url: 'main19' },
+        ],
+        { seriesTitle: '小林さんちのメイドラゴン', highestVolume: 18 }
+      );
+      return r.status === 'has-next' && r.nextVolume === 19 && r.nextUrl === 'main19';
+    })(),
+  },
 ];
 
 let allOk = true;
