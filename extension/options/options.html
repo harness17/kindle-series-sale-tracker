@@ -22,7 +22,14 @@
         </select>
       </label>
       <label class="check"><input id="filterMissing" type="checkbox" /> 欠番ありのみ</label>
-      <label class="check"><input id="filterNext" type="checkbox" /> 続刊ありのみ（照会済み）</label>
+      <label>続刊
+        <select id="filterStatus">
+          <option value="all">すべて</option>
+          <option value="has-next">続刊あり</option>
+          <option value="no-next">続刊なし</option>
+          <option value="unchecked">未照会</option>
+        </select>
+      </label>
       <label class="check"><input id="filterHideCompleted" type="checkbox" /> 完結を隠す</label>
       <button id="checkVisible" type="button" class="secondary">表示中を一括照会</button>
     </section>

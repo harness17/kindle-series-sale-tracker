@@ -13,7 +13,7 @@
     search: document.getElementById('search'),
     sort: document.getElementById('sort'),
     filterMissing: document.getElementById('filterMissing'),
-    filterNext: document.getElementById('filterNext'),
+    filterStatus: document.getElementById('filterStatus'),
     filterHideCompleted: document.getElementById('filterHideCompleted'),
     checkVisible: document.getElementById('checkVisible'),
     clearCache: document.getElementById('clearCache'),
@@ -60,9 +60,15 @@
     const q = els.search.value.trim();
     if (q && !`${s.title} ${s.author || ''}`.includes(q)) return false;
     if (els.filterMissing.checked && s.missing.length === 0) return false;
-    // 完結扱い（手動）は続刊が出ないので「続刊ありのみ」からは除外する。
-    if (els.filterNext.checked && (completed[s.key] || cache[s.key]?.status !== 'has-next')) {
-      return false;
+    // 続刊状態フィルタ。手動完結は続刊照会の自動判定とは別概念なので、
+    // あり/なし/未照会のいずれにも該当させず除外する（すべて選択時のみ表示）。
+    const status = els.filterStatus.value;
+    if (status !== 'all') {
+      if (completed[s.key]) return false;
+      const cached = cache[s.key];
+      if (status === 'has-next' && cached?.status !== 'has-next') return false;
+      if (status === 'no-next' && cached?.status !== 'no-next') return false;
+      if (status === 'unchecked' && cached) return false;
     }
     if (els.filterHideCompleted.checked && completed[s.key]) return false;
     return true;
@@ -124,8 +130,13 @@
 
     const completeBtn = document.createElement('button');
     completeBtn.type = 'button';
-    completeBtn.className = 'secondary';
+    completeBtn.className = 'secondary complete-btn';
     completeBtn.textContent = completed[s.key] ? '完結解除' : '完結にする';
+    // 続刊あり確定のシリーズは完結にできない（完結解除は常に許可）。
+    if (!completed[s.key] && cache[s.key]?.status === 'has-next') {
+      completeBtn.disabled = true;
+      completeBtn.title = '続刊があるため完結にできません';
+    }
     completeBtn.addEventListener('click', () => toggleCompleted(s));
     actions.appendChild(completeBtn);
 
@@ -176,6 +187,8 @@
   }
 
   async function toggleCompleted(s) {
+    // 続刊あり確定のシリーズは完結にできない（解除は許可）。
+    if (!completed[s.key] && cache[s.key]?.status === 'has-next') return;
     if (completed[s.key]) {
       delete completed[s.key];
     } else {
@@ -238,12 +251,19 @@
 
     const el = row.querySelector('.next-result');
     if (el) renderNextResult(el, cache[s.key]);
+    // 照会で続刊あり確定なら完結ボタンを無効化（未完結のときのみ）。
+    const completeBtn = row.querySelector('.complete-btn');
+    if (completeBtn && !completed[s.key]) {
+      const hasNext = cache[s.key]?.status === 'has-next';
+      completeBtn.disabled = hasNext;
+      completeBtn.title = hasNext ? '続刊があるため完結にできません' : '';
+    }
     if (btn) {
       btn.disabled = false;
       btn.textContent = '再確認';
     }
-    // 「続刊ありのみ」表示中は結果次第で行が消えるので再描画
-    if (els.filterNext.checked) render();
+    // 続刊状態で絞り込み中は結果次第で行が消えるので再描画
+    if (els.filterStatus.value !== 'all') render();
   }
 
   async function checkVisible() {
@@ -285,7 +305,7 @@
   els.search.addEventListener('input', render);
   els.sort.addEventListener('change', render);
   els.filterMissing.addEventListener('change', render);
-  els.filterNext.addEventListener('change', render);
+  els.filterStatus.addEventListener('change', render);
   els.filterHideCompleted.addEventListener('change', render);
   els.checkVisible.addEventListener('click', checkVisible);
   els.clearCache.addEventListener('click', clearCache);
