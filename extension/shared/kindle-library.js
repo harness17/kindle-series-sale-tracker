@@ -55,12 +55,51 @@
     return label;
   }
 
+  // 全巻バンドル（完結セット）表記を判定する。これらは「完結済みの1冊まとめ買い」で
+  // 続刊・欠番の追跡対象外。総巻数（全N巻のN）を所有巻と誤認すると、seriesKey が
+  // 「【1」のように崩れたり、所有していない巻数の幻シリーズが生まれる。
+  //
+  // 判定は「数字が総巻数・範囲を表す」2表記に限定する:
+  //   - 全N巻（例: とらドラ！ 全13巻）
+  //   - M～N巻（例: 【1～6巻合本版】…）
+  // 単なる「合本/コンプリート」キーワードでは判定しない。【極！合本シリーズ】の
+  // ように合本リーズ自体が連番（N巻）を持つ正規の多巻シリーズを誤除外しないため。
+  // 通常の巻表記（解体屋ゲン 110巻 等）も巻き込まない。
+  function isBoxSet(title) {
+    return (
+      /全\s*\d{1,3}\s*巻/.test(title) || // 全N巻（完結セットの総巻数）
+      /\d{1,3}\s*[～~〜－‐ー-]\s*\d{1,3}\s*巻/.test(title) // M～N巻（範囲指定の合本）
+    );
+  }
+
+  // 合本版タイトルから束ね表記を取り除き、できるだけ本来のシリーズ名へ寄せる。
+  // 除外対象（巻数なし単巻）になるため厳密さは不要だが、個別巻も所有している
+  // シリーズと偶然キーが一致すれば自然に合流できる。
+  function stripBoxSetNoise(title) {
+    return stripNoise(
+      title
+        // 合本/全N巻/コンプリート/まとめ買い を含む【…】ブロックごと除去
+        .replace(/[【\[][^】\]]*(?:合本|全\s*\d{1,3}\s*巻|コンプリート|まとめ買い)[^】\]]*[】\]]/g, '')
+        .replace(/\d{1,3}\s*[～~〜－‐ー-]\s*\d{1,3}\s*巻/g, '')
+        .replace(/全\s*\d{1,3}\s*巻/g, '')
+        .replace(/(?:超|大)?合本版?/g, '')
+        .replace(/コンプリート(?:BOX|ＢＯＸ)?版?/gi, '')
+        .replace(/まとめ買い/g, '')
+    );
+  }
+
   // タイトルを「シリーズ名」と「巻数」に分割する。
   // 末尾付近の巻トークン位置でタイトルを切り、それ以降（巻ごとに変わる
   // サブタイトルや版表記）は捨てることで、表記ゆれを跨いで同一シリーズへ束ねる。
   // imprint には巻数より後ろの末尾レーベル名を返す（複数版所有の分割判定に使う）。
   function splitSeriesAndVolume(rawTitle) {
     const title = normalizeText(rawTitle);
+
+    // 合本版・全巻バンドルは巻数を抽出せず、続刊追跡の対象外にする。
+    if (isBoxSet(title)) {
+      return { seriesKey: stripBoxSetNoise(title), volume: null, imprint: '' };
+    }
+
     let marker = null; // { headLen, volume, tokenEnd }
 
     // 強い巻マーカー: （N） / 第N巻 / vol.N。最も手前の出現位置を採用する。
@@ -124,6 +163,9 @@
     return {
       title,
       authors,
+      // 保存軽量化のため、グループ集計に必要な第一著者だけを単一文字列で持つ。
+      // 再グルーピング（簡易マージ・読込時再構築）は author だけで mostCommonAuthor を再計算できる。
+      author: firstAuthor(authors),
       acquiredTime: item.acquiredTime ?? null,
       acquiredDate: item.acquiredDate ?? null,
       readStatus: item.readStatus ?? '',
@@ -131,6 +173,19 @@
       seriesKey,
       volume,
       imprint,
+    };
+  }
+
+  // 保存用の最小書誌。重い title / authors[] / acquiredDate / readStatus を捨て、
+  // 再グルーピング・版分割・簡易マージに必要なフィールドだけを残す（約 1/4 サイズ）。
+  // title から再計算できる seriesKey/volume/imprint は、再計算コストを避けるため保持する。
+  function toMinimalBook(book) {
+    return {
+      asin: book.asin,
+      seriesKey: book.seriesKey,
+      volume: Number.isFinite(book.volume) ? book.volume : null,
+      imprint: book.imprint || '',
+      author: book.author || firstAuthor(book.authors),
     };
   }
 
@@ -175,10 +230,12 @@
 
   // グループ内の書籍から最頻の第一著者を表示用に選ぶ。
   // （同一シリーズでも巻ごとに著者欄が揺れる＝原作/作画の表記差・順序違いがあるため）
+  // book.author（正規化済み単一文字列）を優先し、無ければ authors[] から導出する。
+  // これにより full 書誌でも minimal 書誌（authors[] を持たない）でも同じく集計できる。
   function mostCommonAuthor(books) {
     const counts = new Map();
     for (const book of books) {
-      const author = firstAuthor(book.authors);
+      const author = book.author || firstAuthor(book.authors);
       if (!author) continue;
       counts.set(author, (counts.get(author) || 0) + 1);
     }
@@ -250,10 +307,13 @@
     return result;
   }
 
-  function buildSeriesSummary(items) {
+  // 正規化済み書籍（full でも minimal でも可）をグルーピングしてシリーズ要約を作る。
+  // normalizeBook を通した後の books を受け取る前提なので、title を持たない minimal 書籍
+  // （簡易マージ・保存からの再構築）でも同じロジックで集計できる。
+  function summarizeNormalizedBooks(books) {
     const groups = new Map();
     const seenAsins = new Set();
-    for (const item of items.map(normalizeBook)) {
+    for (const item of books) {
       if (!item.seriesKey) continue;
       // 同一 ASIN を二重計上しない（取得側の重複に対する多層防御）。
       if (item.asin) {
@@ -312,6 +372,34 @@
       });
   }
 
+  function buildSeriesSummary(items) {
+    return summarizeNormalizedBooks(items.map(normalizeBook));
+  }
+
+  // 既存の最小書籍リストへ、新規取得分（正規化済み）をマージする。
+  // ASIN で重複排除し、簡易モードの差分取得結果を既存蔵書へ足し込むのに使う。
+  // 返り値は { minimalBooks, series, added } で、そのまま保存・表示できる。
+  function mergeScan(existingMinimalBooks, newBooks) {
+    const byAsin = new Map();
+    for (const b of existingMinimalBooks || []) {
+      if (b && b.asin) byAsin.set(b.asin, b);
+    }
+    let added = 0;
+    for (const raw of newBooks || []) {
+      const book = toMinimalBook(raw);
+      if (!book.asin) continue;
+      if (!byAsin.has(book.asin)) added += 1;
+      // 新しい情報で上書き（巻数・版名の補正が反映される）。
+      byAsin.set(book.asin, book);
+    }
+    const minimalBooks = Array.from(byAsin.values());
+    return {
+      minimalBooks,
+      series: summarizeNormalizedBooks(minimalBooks),
+      added,
+    };
+  }
+
   function formatDateTime(value) {
     if (!value) return '';
     const date = new Date(value);
@@ -349,8 +437,11 @@
     STORAGE_KEY,
     PROGRESS_KEY,
     normalizeBook,
+    toMinimalBook,
     extractOwnershipItems,
     buildSeriesSummary,
+    summarizeNormalizedBooks,
+    mergeScan,
     toCsv,
     computeOwnedRanges,
     computeMissingVolumes,

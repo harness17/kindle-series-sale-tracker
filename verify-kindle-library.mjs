@@ -5,6 +5,10 @@ const require = createRequire(import.meta.url);
 const {
   extractOwnershipItems,
   buildSeriesSummary,
+  summarizeNormalizedBooks,
+  mergeScan,
+  normalizeBook,
+  toMinimalBook,
   toCsv,
   computeOwnedRanges,
   computeMissingVolumes,
@@ -91,10 +95,53 @@ const renamedImprint = buildSeriesSummary([
   { title: '3月のライオン 5 (ジェッツコミックス)', authors: ['羽海野チカ'], asin: 'SL5' },
 ]).filter((g) => g.title.startsWith('3月のライオン'));
 
+// 合本版・全巻バンドル表記は「完結した1冊のまとめ買い」であり、続刊/欠番の概念がない。
+// 巻数を抽出せず（volume=null）、単巻候補として一覧から除外されることを確認する。
+// 不具合例: 【1～6巻合本版】… の「6巻」を巻数=6と誤認し seriesKey が「【1」に崩れる。
+const boxSetTitles = [
+  '【1～6巻合本版】フェアリーテイル・クロニクル ～空気読まない異世界ライフ～ &lt;特典付&gt; (MFブックス)',
+  '【合本版】とらドラ！　全13巻 (電撃文庫)',
+  '銭ゲバ　大合本　全4巻収録',
+  '【合本版】鋼殻のレギオス コンプリートBOX 全31巻 (富士見ファンタジア文庫)',
+];
+const boxSetSplits = boxSetTitles.map((t) => splitSeriesAndVolume(t));
+const boxSetSeries = buildSeriesSummary(
+  boxSetTitles.map((title, i) => ({ title, authors: ['著者A'], asin: `BX${i}` }))
+);
+
+// 合本リーズ自体が連番（N巻）を持つ正規の多巻シリーズは除外しない。
+// 例: 【極！合本シリーズ】ミスター味っ子（1&2セット版）1〜3巻 → 3冊シリーズとして残す。
+const goukonSeries = buildSeriesSummary([
+  { title: '【極！合本シリーズ】ミスター味っ子（1&amp;2セット版）1巻', authors: ['寺沢大介'], asin: 'GM1' },
+  { title: '【極！合本シリーズ】ミスター味っ子（1&amp;2セット版）2巻', authors: ['寺沢大介'], asin: 'GM2' },
+  { title: '【極！合本シリーズ】ミスター味っ子（1&amp;2セット版）3巻', authors: ['寺沢大介'], asin: 'GM3' },
+]).filter((g) => /ミスター味っ子/.test(g.title));
+
 const checks = [
   {
     name: 'ownership response から4冊を抽出できる',
     ok: items.length === 4,
+  },
+  {
+    name: '合本版・全巻バンドルは巻数を抽出しない（volume=null）',
+    ok: boxSetSplits.every((r) => r.volume === null),
+  },
+  {
+    name: '合本版を「【1」等の幻シリーズとして一覧に出さない',
+    ok:
+      boxSetSeries.length === 0 &&
+      splitSeriesAndVolume(boxSetTitles[0]).seriesKey !== '【1',
+  },
+  {
+    name: '通常の巻表記（解体屋ゲン 110巻）は巻数を維持する（過剰除外しない）',
+    ok: splitSeriesAndVolume('解体屋ゲン 110巻').volume === 110,
+  },
+  {
+    name: '合本リーズの連番（【極！合本シリーズ】…N巻）は正規シリーズとして残す',
+    ok:
+      goukonSeries.length === 1 &&
+      goukonSeries[0].count === 3 &&
+      JSON.stringify(goukonSeries[0].ownedVolumes) === JSON.stringify([1, 2, 3]),
   },
   {
     name: 'サンプル冒険譚を1シリーズとして束ねる',
@@ -232,6 +279,120 @@ const checks = [
   {
     name: '末尾が巻数だけの括弧（MOONLIGHT MILE(19)）は版名にしない',
     ok: splitSeriesAndVolume('MOONLIGHT MILE(19)').imprint === '',
+  },
+  // --- 保存軽量化（minimal 書誌）と簡易マージの回帰テスト ---
+  {
+    name: 'minimal 書誌は title/authors を持たず必要フィールドだけ残す',
+    ok: (() => {
+      const min = toMinimalBook(
+        normalizeBook({ title: '私の少年 : 4 (アクションコミックス)', authors: ['高野ひと深'], asin: 'X1' })
+      );
+      const keys = Object.keys(min).sort();
+      return (
+        JSON.stringify(keys) === JSON.stringify(['asin', 'author', 'imprint', 'seriesKey', 'volume']) &&
+        min.volume === 4 &&
+        min.imprint === 'アクションコミックス' &&
+        min.author === '高野ひと深'
+      );
+    })(),
+  },
+  {
+    name: 'series→minimal→再構築で版分割が維持される（私の少年は2分割）',
+    ok: (() => {
+      const raw = [
+        { title: '私の少年（1） (ヤングマガジンコミックス)', authors: ['高野ひと深'], asin: 'WY1' },
+        { title: '私の少年（5） (ヤングマガジンコミックス)', authors: ['高野ひと深'], asin: 'WY5' },
+        { title: '私の少年（7） (ヤングマガジンコミックス)', authors: ['高野ひと深'], asin: 'WY7' },
+        { title: '私の少年 : 1 (アクションコミックス)', authors: ['高野ひと深'], asin: 'WA1' },
+        { title: '私の少年 : 2 (アクションコミックス)', authors: ['高野ひと深'], asin: 'WA2' },
+        { title: '私の少年 : 3 (アクションコミックス)', authors: ['高野ひと深'], asin: 'WA3' },
+        { title: '私の少年 : 4 (アクションコミックス)', authors: ['高野ひと深'], asin: 'WA4' },
+      ];
+      const minimal = raw.map((r) => toMinimalBook(normalizeBook(r)));
+      const rebuilt = summarizeNormalizedBooks(minimal);
+      const action = rebuilt.find((g) => g.key === '私の少年::アクションコミックス');
+      const ym = rebuilt.find((g) => g.key === '私の少年::ヤングマガジンコミックス');
+      return (
+        !!action && !!ym &&
+        JSON.stringify(action.ownedVolumes) === JSON.stringify([1, 2, 3, 4]) &&
+        JSON.stringify(ym.ownedVolumes) === JSON.stringify([1, 5, 7]) &&
+        action.author === '高野ひと深'
+      );
+    })(),
+  },
+  {
+    name: 'series→minimal→再構築で非分割が維持される（つぐもも特装版重複）',
+    ok: (() => {
+      const raw = [
+        { title: 'つぐもも : 23 (アクションコミックス)', authors: ['浜田よしかづ'], asin: 'T23' },
+        { title: 'つぐもも : 24 (アクションコミックス)', authors: ['浜田よしかづ'], asin: 'T24a' },
+        { title: 'つぐもも : 24 【カバーイラストBOOK付】 (アクションコミックス)', authors: ['浜田よしかづ'], asin: 'T24b' },
+        { title: 'つぐもも : 25 (アクションコミックス)', authors: ['浜田よしかづ'], asin: 'T25' },
+      ];
+      const minimal = raw.map((r) => toMinimalBook(normalizeBook(r)));
+      const rebuilt = summarizeNormalizedBooks(minimal).filter((g) => g.title.startsWith('つぐもも'));
+      return rebuilt.length === 1 && JSON.stringify(rebuilt[0].ownedVolumes) === JSON.stringify([23, 24, 25]);
+    })(),
+  },
+  {
+    name: '簡易マージ: 既存minimalに新刊を足すと所有巻が増える',
+    ok: (() => {
+      const existing = [
+        { title: '鬼滅の刃 1', authors: ['吾峠呼世晴'], asin: 'K1' },
+        { title: '鬼滅の刃 2', authors: ['吾峠呼世晴'], asin: 'K2' },
+      ].map((r) => toMinimalBook(normalizeBook(r)));
+      const fresh = [normalizeBook({ title: '鬼滅の刃 3', authors: ['吾峠呼世晴'], asin: 'K3' })];
+      const merged = mergeScan(existing, fresh);
+      const g = merged.series.find((s) => s.key === '鬼滅の刃');
+      return (
+        merged.added === 1 &&
+        merged.minimalBooks.length === 3 &&
+        !!g && JSON.stringify(g.ownedVolumes) === JSON.stringify([1, 2, 3])
+      );
+    })(),
+  },
+  {
+    name: '簡易マージ: 別レーベルの重複巻を足すと新たに版分割が発火する',
+    ok: (() => {
+      // 既存はアクション版のみ（未分割）。後から重複巻のヤンマガ版を足す。
+      const existing = [
+        { title: '私の少年 : 1 (アクションコミックス)', authors: ['高野ひと深'], asin: 'A1' },
+        { title: '私の少年 : 2 (アクションコミックス)', authors: ['高野ひと深'], asin: 'A2' },
+      ].map((r) => toMinimalBook(normalizeBook(r)));
+      const before = summarizeNormalizedBooks(existing);
+      const fresh = [normalizeBook({ title: '私の少年（1） (ヤングマガジンコミックス)', authors: ['高野ひと深'], asin: 'Y1' })];
+      const merged = mergeScan(existing, fresh);
+      const action = merged.series.find((s) => s.key === '私の少年::アクションコミックス');
+      const ym = merged.series.find((s) => s.key === '私の少年::ヤングマガジンコミックス');
+      // マージ前は1グループ（未分割）、マージ後は2グループ（分割発火）。
+      return before.length === 1 && !!action && !!ym;
+    })(),
+  },
+  {
+    name: '簡易マージ: 同一ASIN再取得は重複計上しない（added=0）',
+    ok: (() => {
+      const existing = [normalizeBook({ title: '鬼滅の刃 1', authors: ['吾峠呼世晴'], asin: 'K1' })].map(toMinimalBook);
+      const merged = mergeScan(existing, [normalizeBook({ title: '鬼滅の刃 1', authors: ['吾峠呼世晴'], asin: 'K1' })]);
+      return merged.added === 0 && merged.minimalBooks.length === 1;
+    })(),
+  },
+  {
+    name: '後方互換: 旧full形式(title付きitems)からminimal化して簡易マージできる',
+    ok: (() => {
+      // 旧バージョンの保存 items は title/authors[] を持つフル書誌。これを toMinimalBook で
+      // 最小化して簡易マージの基準にできること（author は authors[] から導出される）。
+      const legacyFullItems = [
+        normalizeBook({ title: '鬼滅の刃 1', authors: ['吾峠呼世晴'], asin: 'K1' }),
+        normalizeBook({ title: '鬼滅の刃 2', authors: ['吾峠呼世晴'], asin: 'K2' }),
+      ];
+      const baseMinimal = legacyFullItems.map(toMinimalBook);
+      const okMinimal =
+        baseMinimal.every((b) => !('title' in b) && !('authors' in b) && b.author === '吾峠呼世晴');
+      const merged = mergeScan(baseMinimal, [normalizeBook({ title: '鬼滅の刃 3', authors: ['吾峠呼世晴'], asin: 'K3' })]);
+      const g = merged.series.find((s) => s.key === '鬼滅の刃');
+      return okMinimal && merged.added === 1 && !!g && g.author === '吾峠呼世晴' &&
+        JSON.stringify(g.ownedVolumes) === JSON.stringify([1, 2, 3]);
+    })(),
   },
 ];
 

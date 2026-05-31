@@ -40,7 +40,7 @@
     if (!scan) {
       summary.textContent = '未スキャン';
       seriesList.innerHTML =
-        '<div class="empty">Kindle一覧を開いてから、このページをスキャンしてください。</div>';
+        '<div class="empty">Kindle一覧を開いてから「全件取得」してください。</div>';
       return;
     }
 
@@ -86,8 +86,77 @@
     setStatus(`最終スキャン: ${formatScannedAt(scan.scannedAt)}`);
   }
 
+  // 簡易更新は前回スキャンのデータが基準になるため、未スキャン時は無効化する。
   async function refresh() {
-    render(await getLastScan());
+    const scan = await getLastScan();
+    render(scan);
+    const hasItems = Array.isArray(scan?.items) && scan.items.length > 0;
+    const simpleBtn = document.getElementById('scanSimple');
+    simpleBtn.disabled = !hasItems;
+    simpleBtn.title = hasItems
+      ? '前回以降の新着だけを高速に取り込みます'
+      : '先に「全件取得」を実行してください';
+  }
+
+  // アクティブタブが Kindle 一覧ページなら tab を返す。違えばステータス表示して null。
+  async function getKindleTab() {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id || !tab.url?.startsWith('https://www.amazon.co.jp/hz/mycd/digital-console/contentlist/booksAll')) {
+      setStatus('Kindle一覧ページを開いてから実行してください。');
+      return null;
+    }
+    return tab;
+  }
+
+  function sendToTab(tabId, message) {
+    return new Promise((resolve) => {
+      chrome.tabs.sendMessage(tabId, message, (response) => {
+        if (chrome.runtime.lastError) {
+          resolve({ ok: false, error: 'ページを再読み込み（F5）してから再試行してください。' });
+          return;
+        }
+        resolve(response || { ok: false, error: '応答がありませんでした。' });
+      });
+    });
+  }
+
+  async function runScan(mode) {
+    const tab = await getKindleTab();
+    if (!tab) return;
+    setStatus(mode === 'simple' ? '新着を確認しています…' : '全件取得を開始します…');
+    const response = await sendToTab(tab.id, { type: 'kst:startScan', mode });
+    if (!response.ok) {
+      setStatus(response.error || 'スキャンに失敗しました。');
+      return;
+    }
+    setStatus(mode === 'simple' ? '簡易更新が完了しました。' : '全件取得が完了しました。');
+    await refresh();
+  }
+
+  // 保存データは最小書誌（title/authors なし）のため、明細エクスポートは
+  // その場で全件をフル書誌として再取得してから出力する。
+  async function exportBooks(kind) {
+    const tab = await getKindleTab();
+    if (!tab) return;
+    setStatus('エクスポート用に全件を再取得しています…');
+    const response = await sendToTab(tab.id, { type: 'kst:exportFetch' });
+    if (!response.ok || !Array.isArray(response.books) || response.books.length === 0) {
+      setStatus(response.error || '再取得に失敗しました。');
+      return;
+    }
+    if (kind === 'csv') {
+      downloadText('kindle-series-books.csv', 'text/csv;charset=utf-8', `﻿${api.toCsv(response.books)}`);
+    } else {
+      // items と series を同じ再取得結果から作り、JSON 内部の整合を保つ
+      // （保存済み series は古い／未スキャン時は空になり得るため流用しない）。
+      const payload = {
+        scannedAt: Date.now(),
+        items: response.books,
+        series: api.buildSeriesSummary(response.books),
+      };
+      downloadText('kindle-series-books.json', 'application/json;charset=utf-8', JSON.stringify(payload, null, 2));
+    }
+    setStatus(`エクスポート完了（${response.books.length}冊）。`);
   }
 
   document.getElementById('openLibrary').addEventListener('click', () => {
@@ -102,49 +171,10 @@
     }
   });
 
-  document.getElementById('scanPage').addEventListener('click', async () => {
-    setStatus('スキャンを開始します...');
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id || !tab.url?.startsWith('https://www.amazon.co.jp/hz/mycd/digital-console/contentlist/booksAll')) {
-      setStatus('Kindle一覧ページを開いてから実行してください。');
-      return;
-    }
-
-    chrome.tabs.sendMessage(tab.id, { type: 'kst:startScan' }, async (response) => {
-      if (chrome.runtime.lastError) {
-        setStatus('ページを再読み込みしてから再試行してください。');
-        return;
-      }
-      if (!response?.ok) {
-        setStatus(response?.error || 'スキャンに失敗しました。');
-        return;
-      }
-      setStatus('スキャンが完了しました。');
-      await refresh();
-    });
-  });
-
-  document.getElementById('exportCsv').addEventListener('click', async () => {
-    const scan = await getLastScan();
-    if (!scan) {
-      setStatus('先にスキャンしてください。');
-      return;
-    }
-    if (!scan.items?.length) {
-      setStatus('\u4FDD\u5B58\u5BB9\u91CF\u306E\u90FD\u5408\u3067\u660E\u7D30\u304C\u7701\u7565\u3055\u308C\u3066\u3044\u307E\u3059\u3002\u518D\u30B9\u30AD\u30E3\u30F3\u3059\u308B\u3068\u51FA\u529B\u3067\u304D\u307E\u3059\u3002');
-      return;
-    }
-    downloadText('kindle-series-books.csv', 'text/csv;charset=utf-8', `\uFEFF${api.toCsv(scan.items)}`);
-  });
-
-  document.getElementById('exportJson').addEventListener('click', async () => {
-    const scan = await getLastScan();
-    if (!scan) {
-      setStatus('先にスキャンしてください。');
-      return;
-    }
-    downloadText('kindle-series-books.json', 'application/json;charset=utf-8', JSON.stringify(scan, null, 2));
-  });
+  document.getElementById('scanFull').addEventListener('click', () => runScan('full'));
+  document.getElementById('scanSimple').addEventListener('click', () => runScan('simple'));
+  document.getElementById('exportCsv').addEventListener('click', () => exportBooks('csv'));
+  document.getElementById('exportJson').addEventListener('click', () => exportBooks('json'));
 
   refresh();
 })();

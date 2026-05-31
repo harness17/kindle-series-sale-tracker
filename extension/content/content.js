@@ -21,6 +21,10 @@
     { sortOrder: 'ASCENDING', sortIndex: 'AUTHOR' },
     { sortOrder: 'DESCENDING', sortIndex: 'AUTHOR' },
   ];
+  // 簡易モードの停止しきい値。取得日降順で既知 ASIN がこの件数だけ連続したら、
+  // 新着領域を抜けたとみなして取得を止める。先頭付近の並び替え揺れに耐えるため
+  // 「最初の既知1件」ではなく連続ランで判定する。
+  const SIMPLE_KNOWN_RUN_STOP = 200;
 
   function delay(ms) {
     return new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -191,7 +195,7 @@
     return { batch: api.extractOwnershipItems(json), numberOfItems: data.numberOfItems };
   }
 
-  async function collectKindleBooks() {
+  function ensureContext() {
     // 拡張を再読み込みすると、開いたままのページに残る旧 content script は
     // コンテキストが無効化され chrome.storage が失われる。先に検知して明示する。
     if (!chrome.runtime?.id || !chrome.storage?.local) {
@@ -199,14 +203,17 @@
         '拡張機能が更新されました。この Kindle 一覧ページを再読み込み（F5）してから、もう一度スキャンしてください。'
       );
     }
-
     const csrfToken = findCsrfToken();
     if (!csrfToken) {
       throw new Error('csrfToken が見つかりません。Amazon.co.jp にログインし直してから再試行してください。');
     }
+    return csrfToken;
+  }
 
-    // Amazon の Ajax は1ソート順あたり約1万件で頭打ちになる。取得日 DESC/ASC の
-    // 両方向から取得して ASIN でマージすることで、その壁を越えて全件回収する。
+  // フルモード: 全ソート軸（取得日・タイトル・著者×昇降）で全件回収する。
+  // Amazon の Ajax は1ソート順あたり約1万件で頭打ちになるため、異なる軸でマージして壁を越える。
+  // 返り値は正規化済み書籍の配列（重複は ASIN で排除済み）。
+  async function collectAllBooks(csrfToken) {
     const byAsin = new Map();
     let reportedTotal = 0;
     let collectedAll = false;
@@ -228,7 +235,7 @@
           const target = Math.max(reportedTotal, byAsin.size);
           await saveProgress(byAsin.size, target, 'running');
           showProgress(
-            `Kindle蔵書を取得中（${passIndex + 1}/${SORT_PASSES.length}）`,
+            `Kindle蔵書を全件取得中（${passIndex + 1}/${SORT_PASSES.length}）`,
             byAsin.size,
             target
           );
@@ -249,52 +256,142 @@
         console.warn('[KST] ソートパスをスキップしました', pass, error?.message || error);
       }
     }
+    return Array.from(byAsin.values());
+  }
 
-    const normalizedItems = Array.from(byAsin.values());
-    const series = api.buildSeriesSummary(normalizedItems);
+  // 簡易モード: 取得日 降順で先頭から取得し、既知 ASIN が連続して規定数出たら停止する。
+  // 新刊（最近の購入）はリストの先頭付近に集まるため、新着分だけを短時間で拾える。
+  // 限界: 配信が後から確定して「古い取得日」で現れる本（ゴースト配信）や、返品・削除は
+  // 降順の先頭には来ないため拾えない。これらの整合にはフルモードが要る。
+  async function collectRecentBooks(csrfToken, knownAsins) {
+    const pass = { sortOrder: 'DESCENDING', sortIndex: 'DATE' };
+    const newByAsin = new Map();
+    let consecutiveKnown = 0;
+    let scanned = 0;
+
+    for (let startIndex = 0; startIndex < MAX_START_INDEX; startIndex += BATCH_SIZE) {
+      const { batch } = await fetchOwnershipPage(csrfToken, pass, startIndex);
+      if (batch.length === 0) break;
+
+      for (const book of batch) {
+        scanned += 1;
+        if (knownAsins.has(book.asin)) {
+          consecutiveKnown += 1;
+        } else {
+          consecutiveKnown = 0;
+          if (!newByAsin.has(book.asin)) newByAsin.set(book.asin, book);
+        }
+      }
+
+      showProgress(`新着を確認中…（既知に到達で停止）`, newByAsin.size, newByAsin.size);
+      await saveProgress(scanned, scanned, 'running');
+
+      // 既知 ASIN が十分連続した = 新着領域を抜けた。これ以上さかのぼらない。
+      if (consecutiveKnown >= SIMPLE_KNOWN_RUN_STOP) break;
+      if (batch.length < BATCH_SIZE) break; // 最終ページ
+      await delay(REQUEST_DELAY_MS);
+    }
+    return Array.from(newByAsin.values());
+  }
+
+  async function readExistingScan() {
+    const data = await chrome.storage.local.get(api.STORAGE_KEY);
+    return data[api.STORAGE_KEY] || null;
+  }
+
+  // mode: 'full' | 'simple'
+  async function collectKindleBooks(mode) {
+    const csrfToken = ensureContext();
+
+    let minimalBooks;
+    let series;
+    let addedNote = '';
+
+    if (mode === 'simple') {
+      const existing = await readExistingScan();
+      const existingItems = Array.isArray(existing?.items) ? existing.items : [];
+      if (existingItems.length === 0) {
+        // 差分の基準が無い（初回・旧縮退データ）。簡易は使えないのでフルへ誘導。
+        throw new Error('簡易更新には前回のスキャン結果が必要です。先に「全件取得」を実行してください。');
+      }
+      const existingMinimal = existingItems.map((b) => api.toMinimalBook(b));
+      const knownAsins = new Set(existingMinimal.map((b) => b.asin));
+      const newBooks = await collectRecentBooks(csrfToken, knownAsins);
+      const merged = api.mergeScan(existingMinimal, newBooks);
+      minimalBooks = merged.minimalBooks;
+      series = merged.series;
+      addedNote = `新着${merged.added}冊を追加`;
+    } else {
+      const normalized = await collectAllBooks(csrfToken);
+      minimalBooks = normalized.map((b) => api.toMinimalBook(b));
+      series = api.summarizeNormalizedBooks(minimalBooks);
+    }
+
     const result = {
       scannedAt: Date.now(),
       sourceUrl: location.href,
-      totalItems: normalizedItems.length,
-      items: normalizedItems,
+      mode,
+      totalItems: minimalBooks.length,
+      items: minimalBooks,
       series,
     };
 
     const saved = await saveScanResult(result, {
-      value: normalizedItems.length,
-      max: normalizedItems.length,
+      value: minimalBooks.length,
+      max: minimalBooks.length,
       status: 'done',
       updatedAt: Date.now(),
     });
 
     if (saved.degraded) {
-      // 消えないバナーで縮退を明示する（CSV/JSON 出力は再スキャンまで不可）。
+      // 最小書誌でも上限を超える規模（理論上ほぼ無いが多層防御）。シリーズ一覧だけ保存。
       showBanner(
-        '保存容量の上限により縮退保存しました',
-        `シリーズ一覧のみ保存（${saved.omitted}冊の明細は未保存・CSV/JSON出力不可）`
+        '保存容量の上限によりシリーズ一覧のみ保存しました',
+        `明細${saved.omitted}冊は未保存（簡易更新・CSV/JSONは要再取得）`
       );
     } else {
-      showBanner('Kindle蔵書の取得が完了しました', `${normalizedItems.length}冊 / ${series.length}シリーズ候補`);
+      const detail = addedNote
+        ? `${addedNote} / 計${minimalBooks.length}冊・${series.length}シリーズ候補`
+        : `${minimalBooks.length}冊 / ${series.length}シリーズ候補`;
+      showBanner('Kindle蔵書の取得が完了しました', detail);
       hideBannerSoon();
     }
     return result;
   }
 
+  // エクスポート用: 保存はせず、全件をフル書誌（title/authors 付き）で取得して返す。
+  // 保存データは最小書誌のため、CSV/JSON の明細出力にはその場での再取得が必要。
+  async function collectForExport() {
+    const csrfToken = ensureContext();
+    const normalized = await collectAllBooks(csrfToken);
+    hideBannerSoon();
+    return normalized;
+  }
+
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (message?.type !== 'kst:startScan') return false;
+    if (message?.type === 'kst:startScan') {
+      const mode = message.mode === 'simple' ? 'simple' : 'full';
+      collectKindleBooks(mode)
+        .then((result) => sendResponse({ ok: true, result }))
+        .catch(async (error) => {
+          try {
+            await saveProgress(0, 0, 'error');
+          } catch (progressError) {
+            console.warn('Failed to save Kindle scan error progress', progressError);
+          }
+          showBanner('Kindle蔵書の取得に失敗しました', error.message);
+          sendResponse({ ok: false, error: error.message });
+        });
+      return true;
+    }
 
-    collectKindleBooks()
-      .then((result) => sendResponse({ ok: true, result }))
-      .catch(async (error) => {
-        try {
-          await saveProgress(0, 0, 'error');
-        } catch (progressError) {
-          console.warn('Failed to save Kindle scan error progress', progressError);
-        }
-        showBanner('Kindle蔵書の取得に失敗しました', error.message);
-        sendResponse({ ok: false, error: error.message });
-      });
+    if (message?.type === 'kst:exportFetch') {
+      collectForExport()
+        .then((books) => sendResponse({ ok: true, books }))
+        .catch((error) => sendResponse({ ok: false, error: error.message }));
+      return true;
+    }
 
-    return true;
+    return false;
   });
 })();
