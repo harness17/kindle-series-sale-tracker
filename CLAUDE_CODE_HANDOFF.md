@@ -1,3 +1,38 @@
+## 2026-05-31 23:36 追記（カード表示統合・割引率ソート・一括照会2種 — Codex 作成）
+
+- 対象: `feature/storage-lite-and-scan-modes`
+- 作成者: Codex
+- 主題: 設計 `docs/superpowers/specs/2026-05-31-card-consolidation-discount-sort-bulk-recheck-design.md` に沿って、カード状態表示の shared 化、割引率ソート、一括照会2種を実装した。
+- 触ってよい範囲: `extension/shared/catalog-probe.js`, `extension/shared/series-card.js`, `extension/options/*`, `extension/popup/*`, `verify-catalog-probe.mjs`, `verify-series-card.mjs`, 対象 docs。
+- 触ってはいけない範囲: manifest 権限、content script、個人の Kindle 蔵書データ、cookie、実購入 URL、`dist/` の stage。
+- 完成条件:
+  - popup/options の状態表示が `renderStatusBlock` へ統合され、割引→価格→続刊状態→最新刊の順で表示される。
+  - `detectNextVolume` の `has-next` が next 系価格/割引/発売日/サムネイルを返す。
+  - options/popup 両方で割引率ソートと、一括再確認/新刊チェックの2ボタンが動く。
+  - `catalog-probe.js` / `kindle-library.js` はロード時に fetch/DOMParser/window を使わない。
+  - manifest は変更しない。
+- 変更内容:
+  - `extension/shared/series-card.js` を UMD で追加し、検索URL、dash fallback、range表示、主オファー解決、割引値、probe、状態ブロック描画を集約。
+  - options/popup から重複 probe/描画ロジックを撤去し、shared モジュールを利用するよう変更。
+  - `verify-catalog-probe.mjs` に next 系オファー捕捉確認を追加し、`verify-series-card.mjs` を追加。
+  - `docs/plans/2026-05-31-card-consolidation-discount-sort-bulk-recheck.md` のチェックリストを完了状態へ更新。
+- セルフ verify:
+  - `node .\verify-kindle-library.mjs` 成功。
+  - `node .\verify-catalog-probe.mjs` 成功。
+  - `node .\verify-series-card.mjs` 成功。
+  - `.\scripts\build-dev.ps1 -Target all` 成功。`dist/dev/chrome` と `dist/dev/firefox` に反映済み。
+  - `git diff --check` 成功（CRLF warning のみ）。
+- 実動確認: Amazon ログインと拡張コンテキストが必要なため実サイト fetch は未実施。Node verify と dev build で静的・純粋ロジックを確認。
+- レビュー観点:
+  - 旧 `has-next` キャッシュは next 系フィールド無しのため割引ソート末尾になり、一括再確認で解消する設計どおりか。
+  - 一括照会2種の対象フィルタが full=表示中全件（完結除外）、simple=`has-next` 以外（完結除外）になっているか。
+  - popup/options の CSS は共通化せず、shared は DOM 構造と class 名だけを提供している。
+- 未解決:
+  - 実 Amazon 検索 HTML fixture による `parseSearchResultsFromDoc` の追加検証は未実施。
+  - この Codex セッションでは `.git/index.lock` 作成と `.git` 直下のテストファイル作成が Permission denied になり、`git add` / `git commit` が未実行。
+- 次アクション:
+  - `.git` 書き込み権限がある環境で、個別ファイル指定の `git add` と日本語 commit を実行する。
+
 ## 2026-05-31 19:15 追記（dev build自動反映ルール — Codex 作成）
 
 - 対象: `H:\ClaudeCode\Browser-Extensions\kindle-series-sale-tracker`

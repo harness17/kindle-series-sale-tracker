@@ -25,8 +25,16 @@
         <button id="exportJson" type="button">JSON</button>
       </section>
 
+      <section class="toolbar toolbar-sort" aria-label="並び替え">
+        <select id="popupSort" aria-label="並び替え">
+          <option value="priority">優先度順</option>
+          <option value="discount">割引率順</option>
+        </select>
+      </section>
+
       <section class="toolbar toolbar-bulk" aria-label="続刊確認">
-        <button id="checkVisible" type="button">表示中をまとめて再確認</button>
+        <button id="checkVisible" type="button">一括再確認</button>
+        <button id="checkSimple" type="button">新刊チェック</button>
       </section>
 
       <p id="status" class="status" role="status"></p>
@@ -39,6 +47,7 @@
 
     <script src="../shared/kindle-library.js"></script>
     <script src="../shared/catalog-probe.js"></script>
+    <script src="../shared/series-card.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

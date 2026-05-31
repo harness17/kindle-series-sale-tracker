@@ -22,7 +22,15 @@ const checks = [
             listPriceText: '￥459',
             discountRate: 9,
           },
-          { title: '鬼滅の刃 12', url: 'u12', releaseDate: '2018-08-03' },
+          {
+            title: '鬼滅の刃 12',
+            url: 'u12',
+            releaseDate: '2018-08-03',
+            thumbnailUrl: 'img12.jpg',
+            priceText: '￥376',
+            listPriceText: '￥459',
+            discountRate: 18,
+          },
           { title: '鬼滅の刃 公式ファンブック', url: 'fb' },
         ],
         { seriesTitle: '鬼滅の刃', highestVolume: 11 }
@@ -31,6 +39,11 @@ const checks = [
         r.status === 'has-next' &&
         r.nextVolume === 12 &&
         r.nextUrl === 'u12' &&
+        r.nextReleaseDate === '2018-08-03' &&
+        r.nextThumbnailUrl === 'img12.jpg' &&
+        r.nextPriceText === '￥376' &&
+        r.nextListPriceText === '￥459' &&
+        r.nextDiscountRate === 18 &&
         r.latestVolume === 13 &&
         r.latestReleaseDate === '2019-01-04' &&
         r.latestThumbnailUrl === 'img13.jpg' &&

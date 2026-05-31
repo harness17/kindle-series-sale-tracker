@@ -60,12 +60,18 @@ h2 {
   grid-template-columns: 1fr 1fr 64px 64px;
 }
 
-.toolbar-bulk {
+.toolbar-sort {
   grid-template-columns: 1fr;
   margin-top: 8px;
 }
 
-button {
+.toolbar-bulk {
+  grid-template-columns: 1fr 1fr;
+  margin-top: 8px;
+}
+
+button,
+select {
   min-height: 34px;
   border: 1px solid #b8c2cc;
   border-radius: 6px;
@@ -141,6 +147,33 @@ button:hover {
   color: #8a5a00;
 }
 
+.badge.sale {
+  background: #fff3cd;
+  color: #8a5a00;
+  font-weight: 700;
+}
+
+.badge.next {
+  background: #e7f7f1;
+  color: #066;
+}
+
+.badge.latest-date,
+.badge.price {
+  background: #eef4ed;
+  color: #23553a;
+}
+
+.badge.missing {
+  background: #fdecea;
+  color: #b42318;
+}
+
+.badge.completed {
+  background: #ecebff;
+  color: #44d;
+}
+
 .series-item.priority {
   border-color: #f0c36d;
 }
@@ -158,6 +191,13 @@ button:hover {
   line-height: 1.5;
 }
 
+.status-block {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
 .catalog-status a {
   color: #075985;
   text-decoration: none;
@@ -165,11 +205,6 @@ button:hover {
 
 .catalog-status a:hover {
   text-decoration: underline;
-}
-
-.sale-text {
-  color: #b42318;
-  font-weight: 700;
 }
 
 .series-body {

@@ -251,6 +251,13 @@ button:disabled {
   font-size: 13px;
 }
 
+.status-block {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
 .empty {
   color: var(--muted);
   padding: 24px;

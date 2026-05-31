@@ -205,7 +205,16 @@
       }
       if (parsed.volume <= highestVolume) continue;
       if (best === null || parsed.volume < best.volume) {
-        best = { volume: parsed.volume, title: r.title, url: r.url };
+        best = {
+          volume: parsed.volume,
+          title: r.title,
+          url: r.url,
+          releaseDate: r.releaseDate || '',
+          thumbnailUrl: r.thumbnailUrl || '',
+          priceText: r.priceText || '',
+          listPriceText: r.listPriceText || '',
+          discountRate: r.discountRate || null,
+        };
       }
     }
 
@@ -215,6 +224,11 @@
         nextVolume: best.volume,
         nextTitle: best.title,
         nextUrl: best.url,
+        nextReleaseDate: best.releaseDate || '',
+        nextThumbnailUrl: best.thumbnailUrl || '',
+        nextPriceText: best.priceText || '',
+        nextListPriceText: best.listPriceText || '',
+        nextDiscountRate: best.discountRate || null,
         latestVolume: latest?.volume ?? best.volume,
         latestTitle: latest?.title ?? best.title,
         latestUrl: latest?.url ?? best.url,

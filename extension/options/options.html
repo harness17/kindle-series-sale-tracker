@@ -18,6 +18,7 @@
         <select id="sort">
           <option value="count">所有冊数（多い順）</option>
           <option value="volume">最高巻（大きい順）</option>
+          <option value="discount">割引率（高い順）</option>
           <option value="title">タイトル（あいうえお順）</option>
         </select>
       </label>
@@ -32,7 +33,8 @@
         </select>
       </label>
       <label class="check"><input id="filterHideCompleted" type="checkbox" /> 完結を隠す</label>
-      <button id="checkVisible" type="button" class="secondary">↻ 表示中を一括照会</button>
+      <button id="checkVisible" type="button" class="secondary">↻ 一括続刊再確認</button>
+      <button id="checkSimple" type="button" class="secondary">＋ 新刊チェック（簡易）</button>
     </section>
 
     <section class="controls">
@@ -46,6 +48,7 @@
 
     <script src="../shared/kindle-library.js"></script>
     <script src="../shared/catalog-probe.js"></script>
+    <script src="../shared/series-card.js"></script>
     <script src="options.js"></script>
   </body>
 </html>

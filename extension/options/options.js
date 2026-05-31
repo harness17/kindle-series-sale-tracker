@@ -3,6 +3,7 @@
 
   const api = window.__KST__;
   const catalog = window.__KST_CATALOG__;
+  const card = window.__KST_CARD__;
   const CACHE_KEY = 'kstCatalogCache';
   const COMPLETED_KEY = 'kstCompletedSeries'; // 手動の完結フラグ { [seriesKey]: true }
   const PRIORITY_KEY = 'kstPrioritySeries'; // 優先表示フラグ { [seriesKey]: true }
@@ -18,6 +19,7 @@
     filterStatus: document.getElementById('filterStatus'),
     filterHideCompleted: document.getElementById('filterHideCompleted'),
     checkVisible: document.getElementById('checkVisible'),
+    checkSimple: document.getElementById('checkSimple'),
     clearCache: document.getElementById('clearCache'),
     clearScan: document.getElementById('clearScan'),
     list: document.getElementById('list'),
@@ -29,10 +31,6 @@
   let completed = {}; // seriesKey -> true（手動完結フラグ）
   let priority = {}; // seriesKey -> true（優先表示フラグ）
   let baseSummary = ''; // クリア後などに戻す件数表示
-
-  function formatRanges(ranges) {
-    return ranges.map(([a, b]) => (a === b ? `${a}` : `${a}-${b}`)).join(', ');
-  }
 
   function iconLabel(icon, text) {
     return `${icon} ${text}`;
@@ -89,6 +87,11 @@
     return list.slice().sort((a, b) => {
       if (by === 'volume') return (b.highestVolume || 0) - (a.highestVolume || 0);
       if (by === 'title') return a.title.localeCompare(b.title, 'ja');
+      if (by === 'discount') {
+        const d = card.discountValue(cache[b.key]) - card.discountValue(cache[a.key]);
+        if (d !== 0) return d;
+        return a.title.localeCompare(b.title, 'ja');
+      }
       if ((b.count || 0) !== (a.count || 0)) return (b.count || 0) - (a.count || 0);
       return a.title.localeCompare(b.title, 'ja');
     });
@@ -138,7 +141,8 @@
     if (completed[s.key]) row.classList.add('completed');
     if (priority[s.key]) row.classList.add('priority');
     const cached = cache[s.key];
-    const thumbnailUrl = cached?.latestThumbnailUrl || s.latestOwnedThumbnailUrl || '';
+    const offer = card.resolvePrimaryOffer(cached);
+    const thumbnailUrl = offer?.thumbnailUrl || cached?.latestThumbnailUrl || s.latestOwnedThumbnailUrl || '';
     if (thumbnailUrl) row.classList.add('has-thumbnail');
 
     const title = document.createElement('div');
@@ -161,7 +165,7 @@
     checkBtn.className = 'secondary';
     checkBtn.textContent = cache[s.key] ? iconLabel('↻', '再確認') : iconLabel('↻', '次巻を確認');
     checkBtn.disabled = !!completed[s.key]; // 完結なら照会不要
-    checkBtn.addEventListener('click', () => checkNext(s, row, checkBtn));
+    checkBtn.addEventListener('click', () => checkNext(s, checkBtn));
     actions.appendChild(checkBtn);
 
     const completeBtn = document.createElement('button');
@@ -189,7 +193,7 @@
       const img = document.createElement('img');
       img.className = 'thumbnail';
       img.src = thumbnailUrl;
-      img.alt = cached?.latestTitle || `${s.title} 最新刊`;
+      img.alt = offer?.title || cached?.latestTitle || `${s.title} 最新刊`;
       img.loading = 'lazy';
       row.appendChild(img);
     }
@@ -203,14 +207,14 @@
 
     const owned = document.createElement('span');
     owned.className = 'badge';
-    owned.textContent = s.ranges.length ? `所有 ${formatRanges(s.ranges)}` : '巻数未推定';
+    owned.textContent = s.ranges.length ? `所有 ${card.formatRanges(s.ranges)}` : '巻数未推定';
     meta.appendChild(owned);
 
     if (s.missing.length) {
       const miss = document.createElement('span');
       miss.className = 'badge missing';
       // 欠番も連番はレンジ表示にする（102,103,…,109 → 102-109）。
-      miss.textContent = `欠番 ${formatRanges(api.computeOwnedRanges(s.missing))}`;
+      miss.textContent = `欠番 ${card.formatRanges(api.computeOwnedRanges(s.missing))}`;
       meta.appendChild(miss);
     }
 
@@ -221,18 +225,10 @@
       meta.appendChild(priorityBadge);
     }
 
-    if (completed[s.key]) {
-      // 手動完結は最優先表示（続刊照会の自動判定とは区別）。
-      const done = document.createElement('span');
-      done.className = 'badge completed';
-      done.textContent = '完結';
-      meta.appendChild(done);
-    } else {
-      const nextResult = document.createElement('span');
-      nextResult.className = 'next-result';
-      renderNextResult(nextResult, cached);
-      meta.appendChild(nextResult);
-    }
+    const statusBlock = document.createElement('span');
+    statusBlock.className = 'next-result';
+    card.renderStatusBlock(statusBlock, cached, { completed: completed[s.key] });
+    meta.appendChild(statusBlock);
 
     row.appendChild(meta);
     return row;
@@ -260,93 +256,11 @@
     render();
   }
 
-  function renderNextResult(el, cached) {
-    el.textContent = '';
-    if (!cached) return;
-
-    if (cached.latestVolume && cached.latestReleaseDate) {
-      const latest = document.createElement('span');
-      latest.className = 'badge latest-date';
-      latest.textContent = `最新刊: ${cached.latestVolume}巻 ${cached.latestReleaseDate}`;
-      el.appendChild(latest);
-      el.appendChild(document.createTextNode(' '));
-    }
-
-    if (cached.latestPriceText) {
-      const price = document.createElement('span');
-      price.className = cached.latestDiscountRate ? 'badge sale' : 'badge price';
-      const discount = cached.latestDiscountRate ? ` ${cached.latestDiscountRate}%OFF` : '';
-      price.textContent = `価格: ${cached.latestPriceText}${discount}`;
-      el.appendChild(price);
-      el.appendChild(document.createTextNode(' '));
-    }
-
-    if (cached.status === 'has-next') {
-      const b = document.createElement('span');
-      b.className = 'badge next';
-      b.textContent = `続刊あり: ${cached.nextVolume}巻`;
-      el.appendChild(b);
-      if (cached.nextUrl) {
-        const a = document.createElement('a');
-        a.href = cached.nextUrl;
-        a.target = '_blank';
-        a.rel = 'noreferrer';
-        a.textContent = cached.nextTitle || '購入ページ';
-        el.appendChild(document.createTextNode(' '));
-        el.appendChild(a);
-      }
-    } else if (cached.status === 'no-next') {
-      el.textContent = '続刊なし（自動判定）';
-    } else {
-      el.textContent = '判定不能';
-    }
-  }
-
-  function seriesSearchUrl(seriesKey, author) {
-    const query = encodeURIComponent(`${seriesKey} ${author ? `${author} ` : ''}Kindle`);
-    return `https://www.amazon.co.jp/s?k=${query}&i=digital-text`;
-  }
-
-  function withClosingDashSeriesKey(seriesKey) {
-    const value = String(seriesKey || '').trim();
-    if (!value || /[-‐－―—]$/.test(value)) return '';
-    return /\s[-‐－―—]\S/.test(value) ? `${value}-` : '';
-  }
-
-  async function probeSeriesWithUrl(s, searchUrl, seriesKey) {
-    const res = await fetch(searchUrl, { credentials: 'include' });
-    if (!res.ok) return { status: 'unknown' };
-    const html = await res.text();
-    const doc = new DOMParser().parseFromString(html, 'text/html');
-    const results = catalog.parseSearchResultsFromDoc(doc);
-    return catalog.detectNextVolume(results, {
-      seriesTitle: s.title,
-      seriesKey,
-      highestVolume: s.highestVolume,
-      ownedImprint: s.imprint,
-    });
-  }
-
   async function probeSeries(s) {
-    if (!Number.isFinite(s.highestVolume)) return { status: 'unknown' };
-    try {
-      const result = await probeSeriesWithUrl(s, s.searchUrl, s.seriesKey);
-      if (result.status === 'has-next') return result;
-
-      const closedDashKey = withClosingDashSeriesKey(s.seriesKey || s.title);
-      if (!closedDashKey) return result;
-
-      const fallbackUrl = seriesSearchUrl(closedDashKey, s.author);
-      if (fallbackUrl === s.searchUrl) return result;
-
-      const fallback = await probeSeriesWithUrl(s, fallbackUrl, closedDashKey);
-      return fallback.status === 'has-next' ? fallback : result;
-    } catch (error) {
-      return { status: 'unknown' };
-    }
+    return card.probeSeries(catalog, s);
   }
 
-  async function checkNext(s, row, btn) {
+  async function checkNext(s, btn) {
     if (btn) {
       btn.disabled = true;
       btn.textContent = iconLabel('↻', '照会中…');
@@ -354,16 +268,6 @@
     const result = await probeSeries(s);
     cache[s.key] = { ...result, checkedAt: Date.now() };
     await chrome.storage.local.set({ [CACHE_KEY]: cache });
-
-    const el = row.querySelector('.next-result');
-    if (el) renderNextResult(el, cache[s.key]);
-    // 照会で続刊あり確定なら完結ボタンを無効化（未完結のときのみ）。
-    const completeBtn = row.querySelector('.complete-btn');
-    if (completeBtn && !completed[s.key]) {
-      const hasNext = cache[s.key]?.status === 'has-next';
-      completeBtn.disabled = hasNext;
-      completeBtn.title = hasNext ? '続刊があるため完結にできません' : '';
-    }
     if (btn) {
       btn.disabled = false;
       btn.textContent = iconLabel('↻', '再確認');
@@ -372,37 +276,75 @@
     render();
   }
 
-  async function checkVisible() {
-    const targets = currentList()
-      .filter((s) => !cache[s.key] && !completed[s.key]);
-    if (targets.length === 0) return;
+  function fullTargets() {
+    return currentList().filter((s) => !completed[s.key]);
+  }
+
+  function simpleTargets() {
+    return currentList().filter((s) => !completed[s.key] && cache[s.key]?.status !== 'has-next');
+  }
+
+  async function runBulkProbe(targets, options) {
+    const label = options.label;
+    const triggerButton = options.triggerButton;
+    const triggerStart = options.triggerStart;
+    const triggerIdle = options.triggerIdle;
+    const emptyMessage = options.emptyMessage;
+    if (targets.length === 0) {
+      els.summary.textContent = emptyMessage;
+      return;
+    }
 
     bulkAbort = false;
-    els.checkVisible.textContent = iconLabel('×', '中止');
-    els.checkVisible.removeEventListener('click', checkVisible);
-    els.checkVisible.addEventListener('click', abortBulk);
+    triggerButton.textContent = iconLabel('×', '中止');
+    triggerButton.removeEventListener('click', triggerStart);
+    triggerButton.addEventListener('click', abortBulk);
+    els.checkVisible.disabled = triggerButton !== els.checkVisible;
+    els.checkSimple.disabled = triggerButton !== els.checkSimple;
 
     let done = 0;
     for (const s of targets) {
       if (bulkAbort) break;
       done += 1;
-      els.summary.textContent = `照会中… ${done}/${targets.length}`;
+      els.summary.textContent = `${label}中… ${done}/${targets.length}`;
       cache[s.key] = { ...(await probeSeries(s)), checkedAt: Date.now() };
       if (done % 20 === 0) await chrome.storage.local.set({ [CACHE_KEY]: cache });
-      await new Promise((resolve) => setTimeout(resolve, REQUEST_DELAY_MS));
+      if (done < targets.length) {
+        await new Promise((resolve) => setTimeout(resolve, REQUEST_DELAY_MS));
+      }
     }
     await chrome.storage.local.set({ [CACHE_KEY]: cache });
 
-    els.checkVisible.removeEventListener('click', abortBulk);
-    els.checkVisible.addEventListener('click', checkVisible);
-    els.checkVisible.textContent = iconLabel('↻', '表示中を一括照会');
+    triggerButton.removeEventListener('click', abortBulk);
+    triggerButton.addEventListener('click', triggerStart);
+    triggerButton.textContent = triggerIdle;
+    els.checkVisible.disabled = false;
+    els.checkSimple.disabled = false;
     render();
 
-    const remaining = currentList().filter((s) => !cache[s.key] && !completed[s.key]).length;
-    let msg = `${series.length}シリーズ（${done}件照会）`;
+    let msg = `${series.length}シリーズ（${done}件${label}）`;
     if (bulkAbort) msg += ' ／ 中止しました';
-    if (remaining > 0) msg += ` ／ 残り${remaining}件`;
     els.summary.textContent = msg;
+  }
+
+  function startFullBulk() {
+    runBulkProbe(fullTargets(), {
+      label: '再確認',
+      triggerButton: els.checkVisible,
+      triggerStart: startFullBulk,
+      triggerIdle: iconLabel('↻', '一括続刊再確認'),
+      emptyMessage: '再確認対象なし',
+    });
+  }
+
+  function startSimpleBulk() {
+    runBulkProbe(simpleTargets(), {
+      label: '新刊チェック',
+      triggerButton: els.checkSimple,
+      triggerStart: startSimpleBulk,
+      triggerIdle: iconLabel('＋', '新刊チェック（簡易）'),
+      emptyMessage: '新刊チェック対象なし',
+    });
   }
 
   function abortBulk() {
@@ -433,7 +375,8 @@
   els.filterPriority.addEventListener('change', render);
   els.filterStatus.addEventListener('change', render);
   els.filterHideCompleted.addEventListener('change', render);
-  els.checkVisible.addEventListener('click', checkVisible);
+  els.checkVisible.addEventListener('click', startFullBulk);
+  els.checkSimple.addEventListener('click', startSimpleBulk);
   els.clearCache.addEventListener('click', clearCache);
   els.clearScan.addEventListener('click', clearScan);
   if (els.topLink) els.topLink.addEventListener('click', scrollToTop);
