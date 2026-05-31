@@ -96,8 +96,6 @@ button:hover {
 .series-list {
   display: grid;
   gap: 8px;
-  max-height: 420px;
-  overflow: auto;
 }
 
 .empty,
@@ -129,8 +127,11 @@ button:hover {
 }
 
 .series-title strong {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 13px;
   line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .badge {
@@ -211,6 +212,16 @@ button:hover {
   display: flex;
   gap: 8px;
   align-items: flex-start;
+}
+
+.series-body > div {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.series-meta,
+.catalog-status {
+  overflow-wrap: anywhere;
 }
 
 .thumbnail {
