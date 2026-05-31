@@ -69,18 +69,9 @@ const checks = [
     })(),
   },
   {
-    name: 'resolvePrimaryOffer は no-next で latest 系フィールドにフォールバックする',
+    name: 'resolvePrimaryOffer は no-next で null を返す（所有巻の価格を出さない）',
     ok: (() => {
-      const offer = resolvePrimaryOffer(noNext);
-      return (
-        offer.isNext === false &&
-        offer.volume === 3 &&
-        offer.title === 'サンプル冒険譚 3' &&
-        offer.releaseDate === '2026-05-01' &&
-        offer.thumbnailUrl === 'latest.jpg' &&
-        offer.priceText === '￥500' &&
-        offer.discountRate === 50
-      );
+      return resolvePrimaryOffer(noNext) === null;
     })(),
   },
   {
@@ -100,7 +91,7 @@ const checks = [
     name: 'discountValue は割引率を返し、割引なし/未照会は -1 を返す',
     ok:
       discountValue(hasNext) === 50 &&
-      discountValue(noNext) === 50 &&
+      discountValue(noNext) === -1 &&
       discountValue({ status: 'no-next', latestPriceText: '￥500' }) === -1 &&
       discountValue(null) === -1,
   },

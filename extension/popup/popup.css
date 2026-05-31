@@ -6,8 +6,8 @@
 }
 
 body {
-  width: 420px;
-  max-width: 420px;
+  width: 100%;
+  min-width: 300px;
   margin: 0;
   background: #f7f4ee;
 }

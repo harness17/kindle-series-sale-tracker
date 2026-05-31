@@ -23,18 +23,17 @@
   }
 
   function resolvePrimaryOffer(cached) {
-    if (!cached) return null;
-    const useNext = cached.status === 'has-next';
+    if (!cached || cached.status !== 'has-next') return null;
     return {
-      volume: useNext ? cached.nextVolume : cached.latestVolume,
-      title: useNext ? cached.nextTitle : cached.latestTitle,
-      url: useNext ? cached.nextUrl : cached.latestUrl,
-      releaseDate: useNext ? cached.nextReleaseDate : cached.latestReleaseDate,
-      thumbnailUrl: useNext ? cached.nextThumbnailUrl : cached.latestThumbnailUrl,
-      priceText: useNext ? cached.nextPriceText : cached.latestPriceText,
-      listPriceText: useNext ? cached.nextListPriceText : cached.latestListPriceText,
-      discountRate: (useNext ? cached.nextDiscountRate : cached.latestDiscountRate) || null,
-      isNext: useNext,
+      volume: cached.nextVolume,
+      title: cached.nextTitle,
+      url: cached.nextUrl,
+      releaseDate: cached.nextReleaseDate,
+      thumbnailUrl: cached.nextThumbnailUrl,
+      priceText: cached.nextPriceText,
+      listPriceText: cached.nextListPriceText,
+      discountRate: cached.nextDiscountRate || null,
+      isNext: true,
     };
   }
 
@@ -97,8 +96,10 @@
 
     const showLatest =
       cached &&
+      cached.status === 'has-next' &&
       cached.latestVolume &&
-      (!offer || !offer.isNext || cached.latestVolume !== offer.volume);
+      offer &&
+      cached.latestVolume !== offer.volume;
     if (showLatest) {
       appendSpace(targetEl);
       const date = cached.latestReleaseDate ? ` ${cached.latestReleaseDate}` : '';

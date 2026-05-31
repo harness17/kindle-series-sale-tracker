@@ -222,6 +222,55 @@ manifest（permissions / host_permissions / content_scripts）の変更は無い
 - 価格・割引の履歴保存やセール通知。
 - options/popup の CSS 完全統一（パレット統合）。
 
+## 改訂（2026-05-31 実機フィードバック反映）
+
+実機確認で2点の問題が判明したため設計を更新する。
+
+### 改訂1: 価格/割引は続刊（has-next）のときだけ表示する
+
+当初の「続刊が無ければ最新刊にフォールバック」は、no-next シリーズの「最新刊」が**必ず所有済みの最高巻**になるため、「既に購入した巻の割引」を表示してしまう。これは意図に反する（ユーザーは続刊の割引を見たい）。
+
+- `resolvePrimaryOffer(cached)` は **`status === 'has-next'` のときだけ続刊(next)のオファーを返し、それ以外は `null`** を返す（所有巻へのフォールバックを廃止）。
+- `renderStatusBlock`: 価格/割引バッジは `offer`（=続刊）があるときだけ表示。`最新 M巻` バッジは **has-next かつ latest≠next のときだけ**（no-next では出さない。`続刊なし` のみ）。
+- `discountValue` は no-next / 未照会 / 割引なしを -1 として末尾送り（変更なし。offer=null で自然に -1）。
+- サムネイルのフォールバック（offer→latest→所有最新）は維持（表紙画像なので所有巻でも問題ない）。
+- `verify-series-card.mjs` の no-next ケースを「null を返す（所有巻の価格を出さない）」に更新。
+
+### 改訂2: ポップアップをサイドパネル化（閉じて初期化される問題の根本解決）
+
+Chrome のポップアップはフォーカスが外れると必ず閉じる。リンク/タブを開くたびに閉じて表示状態がリセットされるため、`chrome.sidePanel`（Firefox は `sidebar_action`）へ移行して常駐させる。popup.html/js は流用し、ファイルは `popup/` のまま（surgical）。
+
+**Chrome（manifests/chrome.json）:**
+- `permissions` に `"sidePanel"` 追加。
+- `action` から `default_popup` を撤去（`default_title` は維持）。
+- `"side_panel": { "default_path": "popup/popup.html" }` を追加。
+- `"background": { "service_worker": "background/background.js" }` を追加。
+
+**新規 extension/background/background.js:**
+- トップレベルで `chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(...)`（アイコン押下でパネルを開く）。`chrome.sidePanel` 不在時は何もしない（try/catch or 存在チェック）。
+
+**Firefox（manifests/firefox.json）:**
+- `chrome.sidePanel` 非対応。`action`（popup）を撤去し、`"sidebar_action": { "default_panel": "popup/popup.html", "default_title": "Kindle Series Sale Tracker" }` を追加。background SW は不要（追加しない）。
+- `browser_specific_settings.gecko` は維持。
+
+**popup.css:**
+- `body { width: 420px; max-width: 420px }` の固定幅を可変化（例: `width: 100%; min-width: 300px`）。サイドパネル/サイドバーの可変幅に収める。
+
+**動作:** popup.js のロジックは不変（`chrome.tabs.query({active,currentWindow})` はパネル文脈でもアクティブタブを返す）。「専用ページ」ボタンや購入リンクを開いてもパネルは閉じない。
+
+**スコープ外:** ソート選択等の UI 状態の storage 永続化（ユーザーは「サイドパネル化」のみ選択。パネルが閉じなくなるため当面不要）。
+
+### 改訂後の影響ファイル（追加分）
+
+| ファイル | 変更 |
+|----------|------|
+| `extension/shared/series-card.js` | `resolvePrimaryOffer` を has-next 限定に、`renderStatusBlock` の最新刊バッジ条件を修正 |
+| `extension/background/background.js` | **新規**。Chrome の sidePanel 起動挙動 |
+| `manifests/chrome.json` | sidePanel 権限・side_panel・background 追加、default_popup 撤去 |
+| `manifests/firefox.json` | sidebar_action 追加、action(popup) 撤去 |
+| `extension/popup/popup.css` | 固定幅を可変化 |
+| `verify-series-card.mjs` | no-next ケースを null 返却に更新 |
+
 ## リスク
 
 - **DOM 依存**: 続刊の価格/割引抽出は Amazon 検索結果 DOM に依存。`extractSearchResultOffer` は既存実装を流用するため新規リスクは小さいが、続刊行の DOM が最新刊行と構造差がある可能性は fixture で確認。

@@ -1,3 +1,43 @@
+## 2026-05-31 23:56 追記（続刊割引のみ表示・サイドパネル化 — Codex 作成）
+
+- 対象: `feature/storage-lite-and-scan-modes`
+- 作成者: Codex
+- 主題: 実機フィードバック改訂に従い、価格/割引表示を続刊だけに限定し、Chrome は sidePanel、Firefox は sidebar_action に切り替えた。
+- 触ってよい範囲: `extension/shared/series-card.js`, `verify-series-card.mjs`, `manifests/chrome.json`, `manifests/firefox.json`, `extension/background/background.js`, `extension/popup/popup.css`, 改訂済み設計 doc。
+- 触ってはいけない範囲: host_permissions、manifest_version、content_scripts matches、popup.js の message/tabs query ロジック、個人の Kindle 蔵書データ。
+- 完成条件:
+  - no-next/unknown/null では `resolvePrimaryOffer` が null を返し、価格/割引と最新刊バッジを出さない。
+  - has-next では next オファーだけを価格/割引ソート・表示に使い、latest は next と別巻の補足だけに出す。
+  - Chrome manifest は sidePanel 権限、side_panel、background SW を持ち、action default_popup を持たない。
+  - Firefox manifest は sidebar_action を持ち、action popup と background SW を持たない。
+  - popup CSS は固定 420px 幅ではなく可変幅。
+- 変更内容:
+  - `resolvePrimaryOffer` を `status === 'has-next'` 限定に変更。
+  - `renderStatusBlock` の latest バッジ条件を has-next かつ latestVolume != nextVolume に限定。
+  - `verify-series-card.mjs` の no-next 期待値と `discountValue(noNext)` を改訂。
+  - `extension/background/background.js` を追加し、`chrome.sidePanel` 存在時だけ `openPanelOnActionClick` を設定。
+  - Chrome/Firefox manifest を side panel/sidebar 用に変更。
+  - `popup.css` の body 固定幅を `width: 100%; min-width: 300px` に変更。
+- セルフ verify:
+  - `node .\verify-kindle-library.mjs` 成功。
+  - `node .\verify-catalog-probe.mjs` 成功。
+  - `node .\verify-series-card.mjs` 成功。
+  - `node --check extension\popup\popup.js` 成功。
+  - `node --check extension\background\background.js` 成功。
+  - `node -e "..."` で両 manifest の JSON parse 成功。
+  - `.\scripts\build-dev.ps1 -Target all` 成功。`dist/dev/chrome` と `dist/dev/firefox` に反映済み。
+  - `git diff --check` 成功（CRLF warning のみ）。
+- 実動確認: 実ブラウザでの side panel/sidebar 起動確認は未実施。dev build は更新済み。
+- レビュー観点:
+  - no-next で所有済み最新刊の価格/割引が表示されないこと。
+  - Chrome の action click で side panel が開くこと。
+  - Firefox の sidebar_action が想定どおり表示されること。
+- 未解決:
+  - 実機での side panel/sidebar 表示確認。
+  - この Codex セッションでは `.git/index.lock` 作成が Permission denied になり、`git add` / `git commit` が未実行。
+- 次アクション:
+  - `.git` 書き込み権限がある環境で、個別ファイル指定の stage と日本語 commit を作成する。
+
 ## 2026-05-31 23:36 追記（カード表示統合・割引率ソート・一括照会2種 — Codex 作成）
 
 - 対象: `feature/storage-lite-and-scan-modes`
