@@ -54,7 +54,7 @@ chrome.storage.local
 
 ### shared/kindle-library.js に純関数を追加
 - `computeOwnedRanges(volumes) → [[1,3],[5,6]]`（連番をレンジ化）
-- `computeMissingVolumes(volumes) → [4]`（最小〜最高巻の間の抜け。最高巻より先は含めない）
+- `computeMissingVolumes(volumes) → [4]`（1巻〜最高巻の間の抜け。最高巻より先は含めない。0巻を所有しているシリーズでは0巻を例外として扱う）
 - 純関数は `shared/kindle-library.js` に置いて export（テスト可能）。**呼び出しは options.js 側**で、既存の `series[].ownedVolumes`（保存済み）から算出する。
   - → `buildSeriesSummary` は変更せず、**再スキャン不要**で新ページが動く（既存スキャン結果をそのまま使える）。
 

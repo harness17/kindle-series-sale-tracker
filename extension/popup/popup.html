@@ -13,19 +13,20 @@
         <p id="summary">未スキャン</p>
       </header>
 
-      <section class="toolbar" aria-label="操作">
-        <button id="openLibrary" type="button">Kindle一覧を開く</button>
+      <section class="toolbar toolbar-scan" aria-label="スキャン">
         <button id="scanFull" type="button">全件取得</button>
         <button id="scanSimple" type="button" title="前回以降の新着だけを高速に取り込みます">簡易更新</button>
       </section>
 
-      <section class="toolbar" aria-label="エクスポート">
+      <section class="toolbar toolbar-nav" aria-label="ナビゲーション">
+        <button id="openLibrary" type="button">Kindle一覧</button>
+        <button id="openFullPage" type="button">専用ページ</button>
         <button id="exportCsv" type="button">CSV</button>
         <button id="exportJson" type="button">JSON</button>
       </section>
 
-      <section class="toolbar" aria-label="一覧">
-        <button id="openFullPage" type="button">全シリーズを専用ページで開く</button>
+      <section class="toolbar toolbar-bulk" aria-label="続刊確認">
+        <button id="checkVisible" type="button">表示中をまとめて再確認</button>
       </section>
 
       <p id="status" class="status" role="status"></p>
@@ -37,6 +38,7 @@
     </main>
 
     <script src="../shared/kindle-library.js"></script>
+    <script src="../shared/catalog-probe.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

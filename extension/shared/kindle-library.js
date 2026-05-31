@@ -10,14 +10,43 @@
   const STORAGE_KEY = 'kstLastScan';
   const PROGRESS_KEY = 'kstScanProgress';
 
-  function normalizeDigits(value) {
-    return String(value ?? '').replace(/[０-９]/g, (ch) =>
+  function normalizeAsciiAlphanumerics(value) {
+    return String(value ?? '').replace(/[０-９Ａ-Ｚａ-ｚ]/g, (ch) =>
       String.fromCharCode(ch.charCodeAt(0) - 0xfee0)
     );
   }
 
+  function decodeHtmlEntities(value) {
+    const namedEntities = {
+      amp: '&',
+      lt: '<',
+      gt: '>',
+      quot: '"',
+      apos: "'",
+      nbsp: ' ',
+    };
+
+    return String(value ?? '')
+      .replace(/&#x([0-9a-f]+);/gi, (match, hex) => {
+        const codePoint = Number.parseInt(hex, 16);
+        return Number.isFinite(codePoint) && codePoint <= 0x10ffff
+          ? String.fromCodePoint(codePoint)
+          : match;
+      })
+      .replace(/&#(\d+);/g, (match, decimal) => {
+        const codePoint = Number.parseInt(decimal, 10);
+        return Number.isFinite(codePoint) && codePoint <= 0x10ffff
+          ? String.fromCodePoint(codePoint)
+          : match;
+      })
+      .replace(/&([a-z]+);/gi, (match, name) => {
+        const entity = namedEntities[name.toLowerCase()];
+        return entity === undefined ? match : entity;
+      });
+  }
+
   function normalizeText(value) {
-    return normalizeDigits(value)
+    return normalizeAsciiAlphanumerics(decodeHtmlEntities(value))
       .replace(/\s+/g, ' ')
       .replace(/[：]/g, ':')
       .trim();
@@ -30,6 +59,10 @@
     return normalizeText(String(authors ?? '').split(/[,、]/)[0] ?? '');
   }
 
+  function imageUrlFromBook(book) {
+    return String(book?.thumbnailUrl || book?.productImage || '').trim();
+  }
+
   function stripNoise(text) {
     return normalizeText(text)
       .replace(/【[^】]*】/g, '') // 【電子版】【特典付き】等の版表記
@@ -38,6 +71,34 @@
       .replace(/\s+/g, ' ')
       .replace(/[ \t　:：\-―—~～]+$/g, '')
       .trim();
+  }
+
+  function stripSeriesHeadNoise(text) {
+    const normalized = normalizeText(text);
+    const closingMarker = normalized.match(/([-‐－―—~～])\s*$/);
+    const markerCount = (normalized.match(/[-‐－―—~～]/g) || []).length;
+    const stripped = stripNoise(normalized);
+    if (closingMarker && markerCount >= 2 && stripped && !/[-‐－―—~～]$/.test(stripped)) {
+      return `${stripped}${closingMarker[1]}`;
+    }
+    return stripped;
+  }
+
+  function normalizeSeriesKey(value) {
+    return stripSeriesHeadNoise(value);
+  }
+
+  function stripTrailingWave(value) {
+    return String(value || '').replace(/[~～]+$/g, '').trim();
+  }
+
+  function stripUnnumberedTitleNoise(text) {
+    const title = normalizeText(text);
+    const match = title.match(/[（(]([^（()）]+)[)）]\s*$/);
+    if (!match) return title;
+    const label = stripNoise(match[1]);
+    if (!label || /^\d+$/.test(label)) return title;
+    return title.slice(0, match.index);
   }
 
   // 巻マーカーより後ろにある「末尾の非数字な括弧」をレーベル（版）名として取り出す。
@@ -88,6 +149,20 @@
     );
   }
 
+  // 【電子限定特装版】等の版修飾を検出する。同じレーベル内でも通常版と
+  // 特装版を分割するために imprint へ組み込む。全 Kindle 書籍に付く
+  // 電子版/Kindle版は差別化に使えないため除外する。
+  function extractEditionTag(title) {
+    const matches = title.matchAll(/【([^】]+)】/g);
+    for (const m of matches) {
+      const tag = m[1].trim();
+      if (/^(?:電子版?|Kindle版?)$/i.test(tag)) continue;
+      if (/特典/.test(tag)) continue;
+      if (/版|特装|限定/.test(tag)) return tag;
+    }
+    return '';
+  }
+
   // タイトルを「シリーズ名」と「巻数」に分割する。
   // 末尾付近の巻トークン位置でタイトルを切り、それ以降（巻ごとに変わる
   // サブタイトルや版表記）は捨てることで、表記ゆれを跨いで同一シリーズへ束ねる。
@@ -134,19 +209,20 @@
     }
 
     if (marker === null) {
-      return { seriesKey: stripNoise(title), volume: null, imprint: '' };
+      return { seriesKey: stripSeriesHeadNoise(stripUnnumberedTitleNoise(title)), volume: null, imprint: '' };
     }
 
-    const seriesKey = stripNoise(title.slice(0, marker.headLen));
+    const seriesKey = stripSeriesHeadNoise(title.slice(0, marker.headLen));
     // 切った結果シリーズ名が空 → その数字はタイトルの一部とみなし、切らない。
     if (!seriesKey) {
-      return { seriesKey: stripNoise(title), volume: null, imprint: '' };
+      return { seriesKey: stripSeriesHeadNoise(stripUnnumberedTitleNoise(title)), volume: null, imprint: '' };
     }
-    return {
-      seriesKey,
-      volume: marker.volume,
-      imprint: extractImprint(title, marker.tokenEnd),
-    };
+    const baseImprint = extractImprint(title, marker.tokenEnd);
+    const editionTag = extractEditionTag(title);
+    const imprint = editionTag
+      ? (baseImprint ? `${editionTag}/${baseImprint}` : editionTag)
+      : baseImprint;
+    return { seriesKey, volume: marker.volume, imprint };
   }
 
   function normalizeBook(item) {
@@ -170,7 +246,8 @@
       acquiredDate: item.acquiredDate ?? null,
       readStatus: item.readStatus ?? '',
       asin: normalizeText(item.asin),
-      seriesKey,
+      thumbnailUrl: imageUrlFromBook(item),
+      seriesKey: normalizeSeriesKey(seriesKey),
       volume,
       imprint,
     };
@@ -182,9 +259,9 @@
   function toMinimalBook(book) {
     return {
       asin: book.asin,
-      seriesKey: book.seriesKey,
+      seriesKey: normalizeSeriesKey(book.seriesKey),
       volume: Number.isFinite(book.volume) ? book.volume : null,
-      imprint: book.imprint || '',
+      imprint: normalizeText(book.imprint || ''),
       author: book.author || firstAuthor(book.authors),
     };
   }
@@ -216,13 +293,17 @@
     return ranges;
   }
 
-  // 最小巻〜最高巻の間で所有していない巻番号を返す。最高巻より先（未刊/続刊）は含めない。
+  // 1巻〜最高巻の間で所有していない巻番号を返す。最高巻より先（未刊/続刊）は含めない。
+  // 0巻を所有しているシリーズだけは0巻を例外として起点に含める。
   function computeMissingVolumes(volumes) {
     const sorted = sortedUniqueVolumes(volumes);
-    if (sorted.length < 2) return [];
+    if (sorted.length === 0) return [];
+    const highest = sorted[sorted.length - 1];
+    if (highest <= 1) return [];
     const owned = new Set(sorted);
     const missing = [];
-    for (let v = sorted[0] + 1; v < sorted[sorted.length - 1]; v += 1) {
+    const start = owned.has(0) ? 0 : 1;
+    for (let v = start; v < highest; v += 1) {
       if (!owned.has(v)) missing.push(v);
     }
     return missing;
@@ -269,6 +350,37 @@
     return best;
   }
 
+  function latestOwnedThumbnailUrl(books) {
+    let best = null;
+    for (const book of books) {
+      const url = imageUrlFromBook(book);
+      if (!url) continue;
+      const volume = Number.isFinite(book.volume) ? book.volume : -1;
+      if (best === null || volume > best.volume) {
+        best = { volume, url };
+      }
+    }
+    return best?.url || '';
+  }
+
+  function inferUnnumberedFirstVolumes(groupList) {
+    return groupList.map((group) => {
+      const books = group.books;
+      const unnumbered = books.filter((book) => !Number.isFinite(book.volume));
+      if (unnumbered.length !== 1) return group;
+
+      const numberedVolumes = new Set(
+        books.map((book) => book.volume).filter((volume) => Number.isFinite(volume))
+      );
+      if (numberedVolumes.has(1) || numberedVolumes.size === 0) return group;
+
+      return {
+        ...group,
+        books: books.map((book) => (book === unnumbered[0] ? { ...book, volume: 1 } : book)),
+      };
+    });
+  }
+
   // 同一作品を複数の版（レーベル）で所有しているグループを版ごとに分割する。
   // 分割するのは「同じ巻番号が2冊以上ある（＝別版が重なっている確証）」かつ
   // 「2種以上の版名がある」かつ「全冊が版名を持つ」場合だけ。
@@ -287,7 +399,8 @@
       const allHaveImprint = group.books.every((b) => b.imprint);
 
       if (!hasDuplicateVolume || imprints.size < 2 || !allHaveImprint) {
-        result.push(group);
+        // 非分割グループでも seriesKey（= 装飾なしのカタログ照合キー）を明示しておく。
+        result.push({ ...group, seriesKey: group.key });
         continue;
       }
 
@@ -296,7 +409,11 @@
         if (!byImprint.has(book.imprint)) {
           byImprint.set(book.imprint, {
             key: `${group.key}::${book.imprint}`,
+            // title は版を併記した表示用。seriesKey は装飾なしの元シリーズ名を保持し、
+            // 検索クエリと続刊照合（detectNextVolume）はこちらを使う。装飾タイトルを
+            // 照合キーに使うと実カタログ結果と一致せず常に「続刊なし」になる。
             title: `${group.title}（${book.imprint}）`,
+            seriesKey: group.key,
             books: [],
           });
         }
@@ -313,21 +430,42 @@
   function summarizeNormalizedBooks(books) {
     const groups = new Map();
     const seenAsins = new Set();
+    const normalizedBooks = [];
+    const preferredKeys = new Map();
+
     for (const item of books) {
-      if (!item.seriesKey) continue;
+      const seriesKey = normalizeSeriesKey(item.seriesKey);
+      if (!seriesKey) continue;
+      const book = {
+        ...item,
+        seriesKey,
+        imprint: normalizeText(item.imprint || ''),
+      };
+      normalizedBooks.push(book);
+
+      const keyStem = stripTrailingWave(seriesKey);
+      const current = preferredKeys.get(keyStem);
+      if (!current || /[~～]$/.test(seriesKey)) {
+        preferredKeys.set(keyStem, seriesKey);
+      }
+    }
+
+    for (const item of normalizedBooks) {
+      const seriesKey = preferredKeys.get(stripTrailingWave(item.seriesKey)) || item.seriesKey;
+      const book = { ...item, seriesKey };
       // 同一 ASIN を二重計上しない（取得側の重複に対する多層防御）。
-      if (item.asin) {
-        if (seenAsins.has(item.asin)) continue;
-        seenAsins.add(item.asin);
+      if (book.asin) {
+        if (seenAsins.has(book.asin)) continue;
+        seenAsins.add(book.asin);
       }
       // 著者表記ゆれ（巻ごとの原作/作画の差・順序違い）でシリーズが分裂し、
       // 欠番を誤検知するのを防ぐため、グループキーは seriesKey のみとする。
       // 著者は表示用にグループ内最頻値を後段で採用する。
-      const key = item.seriesKey;
+      const key = book.seriesKey;
       if (!groups.has(key)) {
         groups.set(key, {
           key,
-          title: item.seriesKey,
+          title: book.seriesKey,
           books: [],
           count: 0,
           ownedVolumes: [],
@@ -336,10 +474,10 @@
           searchUrl: '',
         });
       }
-      groups.get(key).books.push(item);
+      groups.get(key).books.push(book);
     }
 
-    const summaries = splitMixedImprints(Array.from(groups.values())).map((group) => {
+    const summaries = splitMixedImprints(inferUnnumberedFirstVolumes(Array.from(groups.values()))).map((group) => {
       const volumes = group.books
         .map((item) => item.volume)
         .filter((volume) => Number.isFinite(volume))
@@ -347,13 +485,18 @@
       const highestVolume = volumes.length ? volumes[volumes.length - 1] : null;
       const author = mostCommonAuthor(group.books);
       const imprint = mostCommonImprint(group.books);
+      const thumbnailUrl = latestOwnedThumbnailUrl(group.books);
+      // 検索・続刊照合は装飾なしの seriesKey を使う（分割グループの title には
+      // 版名括弧が付くため、それで Amazon を検索すると実カタログと噛み合わない）。
+      const seriesKey = group.seriesKey || group.key;
       const query = encodeURIComponent(
-        `${group.title} ${author ? `${author} ` : ''}Kindle`
+        `${seriesKey} ${author ? `${author} ` : ''}Kindle`
       );
 
       return {
         key: group.key,
         title: group.title,
+        seriesKey,
         author,
         imprint,
         count: group.books.length,
@@ -361,6 +504,7 @@
         highestVolume,
         nextVolume: highestVolume ? highestVolume + 1 : null,
         searchUrl: `https://www.amazon.co.jp/s?k=${query}&i=digital-text`,
+        latestOwnedThumbnailUrl: thumbnailUrl,
       };
     });
 
@@ -446,6 +590,7 @@
     computeOwnedRanges,
     computeMissingVolumes,
     splitSeriesAndVolume,
-    seriesKeyFromTitle: (title) => splitSeriesAndVolume(title).seriesKey,
+    normalizeSeriesKey,
+    seriesKeyFromTitle: (title) => normalizeSeriesKey(splitSeriesAndVolume(title).seriesKey),
   };
 });

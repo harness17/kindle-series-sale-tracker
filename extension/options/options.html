@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="options.css" />
   </head>
   <body>
-    <header class="topbar">
+    <header id="pageTop" class="topbar">
       <h1>Kindle シリーズ続刊トラッカー</h1>
       <div id="summary" class="summary">読み込み中…</div>
     </header>
@@ -22,6 +22,7 @@
         </select>
       </label>
       <label class="check"><input id="filterMissing" type="checkbox" /> 欠番ありのみ</label>
+      <label class="check"><input id="filterPriority" type="checkbox" /> 優先のみ</label>
       <label>続刊
         <select id="filterStatus">
           <option value="all">すべて</option>
@@ -31,16 +32,17 @@
         </select>
       </label>
       <label class="check"><input id="filterHideCompleted" type="checkbox" /> 完結を隠す</label>
-      <button id="checkVisible" type="button" class="secondary">表示中を一括照会</button>
+      <button id="checkVisible" type="button" class="secondary">↻ 表示中を一括照会</button>
     </section>
 
     <section class="controls">
-      <button id="clearCache" type="button" class="secondary">照会キャッシュをクリア</button>
-      <button id="clearScan" type="button" class="secondary">スキャン結果をクリア</button>
-      <span class="summary">※完結フラグは保持されます</span>
+      <button id="clearCache" type="button" class="secondary">× 照会キャッシュをクリア</button>
+      <button id="clearScan" type="button" class="secondary">× スキャン結果をクリア</button>
+      <span class="summary">※完結・優先フラグは保持されます</span>
     </section>
 
     <main id="list" class="list"></main>
+    <a class="top-link" href="#pageTop">↑ トップへ</a>
 
     <script src="../shared/kindle-library.js"></script>
     <script src="../shared/catalog-probe.js"></script>

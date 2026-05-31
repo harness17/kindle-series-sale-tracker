@@ -1,7 +1,11 @@
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
-const { detectNextVolume } = require('./extension/shared/catalog-probe.js');
+const {
+  detectNextVolume,
+  extractSearchResultOffer,
+  normalizePublicationDate,
+} = require('./extension/shared/catalog-probe.js');
 
 const checks = [
   {
@@ -9,13 +13,110 @@ const checks = [
     ok: (() => {
       const r = detectNextVolume(
         [
-          { title: '鬼滅の刃 13', url: 'u13' },
-          { title: '鬼滅の刃 12', url: 'u12' },
+          {
+            title: '鬼滅の刃 13',
+            url: 'u13',
+            releaseDate: '2019-01-04',
+            thumbnailUrl: 'img13.jpg',
+            priceText: '￥418',
+            listPriceText: '￥459',
+            discountRate: 9,
+          },
+          { title: '鬼滅の刃 12', url: 'u12', releaseDate: '2018-08-03' },
           { title: '鬼滅の刃 公式ファンブック', url: 'fb' },
         ],
         { seriesTitle: '鬼滅の刃', highestVolume: 11 }
       );
-      return r.status === 'has-next' && r.nextVolume === 12 && r.nextUrl === 'u12';
+      return (
+        r.status === 'has-next' &&
+        r.nextVolume === 12 &&
+        r.nextUrl === 'u12' &&
+        r.latestVolume === 13 &&
+        r.latestReleaseDate === '2019-01-04' &&
+        r.latestThumbnailUrl === 'img13.jpg' &&
+        r.latestPriceText === '￥418' &&
+        r.latestListPriceText === '￥459' &&
+        r.latestDiscountRate === 9
+      );
+    })(),
+  },
+  {
+    name: '最高巻以下だけでも最新刊の発売日を返す',
+    ok: (() => {
+      const r = detectNextVolume(
+        [
+          { title: '鬼滅の刃 10', url: 'u10', releaseDate: '2018-03-02' },
+          { title: '鬼滅の刃 11', url: 'u11', releaseDate: '2018-06-04' },
+        ],
+        { seriesTitle: '鬼滅の刃', highestVolume: 11 }
+      );
+      return r.status === 'no-next' && r.latestVolume === 11 && r.latestReleaseDate === '2018-06-04';
+    })(),
+  },
+  {
+    name: '検索結果テキストから日本語/スラッシュ形式の発売日を正規化する',
+    ok:
+      normalizePublicationDate('発売日: 2025年6月17日') === '2025-06-17' &&
+      normalizePublicationDate('発行日: 2025/06/07') === '2025-06-07',
+  },
+  {
+    name: '検索結果DOMから価格と割引率を抽出する',
+    ok: (() => {
+      const node = {
+        textContent: 'Kindle版 ￥418 参考価格 ￥459 9%OFF',
+        querySelector(selector) {
+          if (selector.includes(':not')) return { textContent: '￥418' };
+          if (selector.includes('a-text-price')) return { textContent: '￥459' };
+          return null;
+        },
+      };
+      const offer = extractSearchResultOffer(node);
+      return (
+        offer.priceText === '￥418' &&
+        offer.listPriceText === '￥459' &&
+        offer.discountRate === 9
+      );
+    })(),
+  },
+  {
+    name: '商品名だけの%OFF表記は割引率として扱わない',
+    ok: (() => {
+      const node = {
+        textContent: '増量20%OFFパック Kindle版 ￥1,280',
+        querySelector(selector) {
+          if (selector.includes(':not')) return { textContent: '￥1,280' };
+          return null;
+        },
+        cloneNode() {
+          return {
+            textContent: 'Kindle版 ￥1,280',
+            querySelectorAll() {
+              return [];
+            },
+          };
+        },
+      };
+      const offer = extractSearchResultOffer(node);
+      return offer.priceText === '￥1,280' && offer.listPriceText === '' && offer.discountRate === null;
+    })(),
+  },
+  {
+    name: '表示割引率より価格差計算が大きければ計算値を採用する',
+    ok: (() => {
+      const node = {
+        textContent: 'Kindle版 ￥800 参考価格 ￥1,000 10%OFF',
+        querySelector(selector) {
+          if (selector.includes(':not')) return { textContent: '￥800' };
+          if (selector.includes('a-text-price')) return { textContent: '￥1,000' };
+          return null;
+        },
+      };
+      const offer = extractSearchResultOffer(node);
+      return (
+        offer.priceText === '￥800' &&
+        offer.listPriceText === '￥1,000' &&
+        offer.discountRate === 20
+      );
     })(),
   },
   {
@@ -143,6 +244,133 @@ const checks = [
         }
       );
       return r.status === 'has-next' && r.nextVolume === 8 && r.nextUrl === 'imouto8';
+    })(),
+  },
+  {
+    name: '所有側seriesKeyがHTML entity入りでも検索結果の&表記と照合する（FRONT MISSION）',
+    ok: (() => {
+      const r = detectNextVolume(
+        [
+          {
+            title: 'FRONT MISSION DOG LIFE & DOG STYLE 2巻 (デジタル版ヤングガンガンコミックス)',
+            url: 'front2',
+          },
+          {
+            title: 'FRONT MISSION DOG LIFE & DOG STYLE 10巻 (デジタル版ヤングガンガンコミックス)',
+            url: 'front10',
+          },
+        ],
+        {
+          seriesTitle: 'FRONT MISSION DOG LIFE &amp; DOG STYLE',
+          seriesKey: 'FRONT MISSION DOG LIFE &amp; DOG STYLE',
+          highestVolume: 1,
+          ownedImprint: 'デジタル版ヤングガンガンコミックス',
+        }
+      );
+      return (
+        r.status === 'has-next' &&
+        r.nextVolume === 2 &&
+        r.nextUrl === 'front2' &&
+        r.latestVolume === 10 &&
+        r.latestUrl === 'front10'
+      );
+    })(),
+  },
+  {
+    name: '検索結果側が全角英字+括弧巻数でも続刊を検出する（ミラーマン2D）',
+    ok: (() => {
+      const r = detectNextVolume(
+        [
+          {
+            title: 'ミラーマン２Ｄ（６） (ヒーローズコミックス)',
+            url: 'mirror6',
+          },
+        ],
+        {
+          seriesTitle: 'ミラーマン2D',
+          seriesKey: 'ミラーマン2D',
+          highestVolume: 5,
+          ownedImprint: 'ヒーローズコミックス',
+        }
+      );
+      return r.status === 'has-next' && r.nextVolume === 6 && r.nextUrl === 'mirror6';
+    })(),
+  },
+  {
+    name: '旧seriesKeyの末尾ハイフン欠落があっても正タイトルの続刊を検出する（SHOCKER SIDE）',
+    ok: (() => {
+      const r = detectNextVolume(
+        [
+          {
+            title:
+              '真の安らぎはこの世になく -シン・仮面ライダー SHOCKER SIDE- 6 (ヤングジャンプコミックスDIGITAL)',
+            url: 'shocker6',
+          },
+        ],
+        {
+          seriesTitle: '真の安らぎはこの世になく -シン・仮面ライダー SHOCKER SIDE',
+          seriesKey: '真の安らぎはこの世になく -シン・仮面ライダー SHOCKER SIDE',
+          highestVolume: 5,
+        }
+      );
+      return r.status === 'has-next' && r.nextVolume === 6 && r.nextUrl === 'shocker6';
+    })(),
+  },
+  {
+    name: 'seriesKeyの末尾波ダッシュ有無が違っても続刊を検出する（響）',
+    ok: (() => {
+      const r = detectNextVolume(
+        [{ title: '響～小説家になる方法（３） (ビッグコミックス)', url: 'hibiki3' }],
+        {
+          seriesTitle: '響～小説家になる方法～',
+          seriesKey: '響～小説家になる方法～',
+          highestVolume: 2,
+          ownedImprint: 'ビッグコミックス',
+        }
+      );
+      return r.status === 'has-next' && r.nextVolume === 3 && r.nextUrl === 'hibiki3';
+    })(),
+  },
+  {
+    name: '版分割タイトルでもseriesKey指定で通常版の続刊を検出する（うちの師匠13）',
+    ok: (() => {
+      const r = detectNextVolume(
+        [
+          { title: 'うちの師匠はしっぽがない（13） (アフタヌーンコミックス)', url: 'normal13' },
+          {
+            title: 'うちの師匠はしっぽがない（13）【電子限定特装版】 (アフタヌーンコミックス)',
+            url: 'special13',
+          },
+        ],
+        {
+          seriesTitle: 'うちの師匠はしっぽがない（アフタヌーンコミックス）',
+          seriesKey: 'うちの師匠はしっぽがない',
+          highestVolume: 12,
+          ownedImprint: 'アフタヌーンコミックス',
+        }
+      );
+      return r.status === 'has-next' && r.nextVolume === 13 && r.nextUrl === 'normal13';
+    })(),
+  },
+  {
+    name: '版分割タイトルでもseriesKey指定で電子限定特装版の続刊を検出する（うちの師匠13）',
+    ok: (() => {
+      const r = detectNextVolume(
+        [
+          { title: 'うちの師匠はしっぽがない（13） (アフタヌーンコミックス)', url: 'normal13' },
+          {
+            title: 'うちの師匠はしっぽがない（13）【電子限定特装版】 (アフタヌーンコミックス)',
+            url: 'special13',
+          },
+        ],
+        {
+          seriesTitle: 'うちの師匠はしっぽがない（電子限定特装版/アフタヌーンコミックス）',
+          seriesKey: 'うちの師匠はしっぽがない',
+          highestVolume: 12,
+          ownedImprint: '電子限定特装版/アフタヌーンコミックス',
+        }
+      );
+      return r.status === 'has-next' && r.nextVolume === 13 && r.nextUrl === 'special13';
     })(),
   },
 ];

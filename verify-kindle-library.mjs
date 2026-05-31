@@ -19,7 +19,7 @@ const payload = JSON.parse(readFileSync('fixtures/ownership-response.json', 'utf
 const items = extractOwnershipItems(payload);
 const series = buildSeriesSummary(items);
 const csv = toCsv(items);
-const serializedScan = JSON.stringify({ items, series });
+const serializedItems = JSON.stringify({ items: items.map(toMinimalBook) });
 
 // --- シリーズ推定（タイトル表記ゆれ）の回帰テスト ---
 function summarize(titles) {
@@ -35,6 +35,24 @@ const subtitle = summarize([
   '転生賢者の異世界ライフ 2 ～第二の職業を得て、世界最強になりました～',
 ]);
 const mixedNotation = summarize(['進撃の巨人（1）', '進撃の巨人 2', '進撃の巨人（3）']);
+const trailingWaveVariant = summarize([
+  '響～小説家になる方法～（１） (ビッグコミックス)',
+  '響～小説家になる方法（２） (ビッグコミックス)',
+]);
+const htmlEntityTitle = splitSeriesAndVolume(
+  'FRONT MISSION DOG LIFE &amp; DOG STYLE 1巻 (デジタル版ヤングガンガンコミックス)'
+);
+const mirrorMan2dTitle = splitSeriesAndVolume('ミラーマン２Ｄ（６） (ヒーローズコミックス)');
+const shockerSide = splitSeriesAndVolume(
+  '真の安らぎはこの世になく -シン・仮面ライダー SHOCKER SIDE- 1 (ヤングジャンプコミックスDIGITAL)'
+);
+const simpleDashSeparator = splitSeriesAndVolume('テスト作品 - 1');
+const unnumberedFirstVolumes = summarize([
+  '異種族レビュアーズコミックアンソロジー ～ダークネス～ (ドラゴンコミックスエイジ)',
+  '異種族レビュアーズコミックアンソロジー ～ダークネス～ 2 (ドラゴンコミックスエイジ)',
+  '限界OL霧切ギリ子 (ヤングマガジンコミックス)',
+  '限界OL霧切ギリ子 2 (ヤングマガジンコミックス)',
+]);
 // 巻数の直後が空白でなく【】等の括弧でも巻数を認識し、同一シリーズに束ねる
 const bracketAfterVolume = summarize([
   '小林さんちのメイドラゴン : 10 (アクションコミックス)',
@@ -162,8 +180,18 @@ const checks = [
     ok: csv.includes('"B000000001"') && csv.includes('"サンプル冒険譚"'),
   },
   {
-    name: '保存用データに画像URLを含めない',
-    ok: !serializedScan.includes('productImage') && !serializedScan.includes('example.invalid'),
+    name: '保存用明細に画像URLを含めない',
+    ok: !serializedItems.includes('productImage') && !serializedItems.includes('example.invalid'),
+  },
+  {
+    name: 'シリーズ要約には最新所有巻のサムネイルだけを持つ',
+    ok:
+      series.some(
+        (group) =>
+          group.title === 'サンプル冒険譚' &&
+          group.latestOwnedThumbnailUrl === 'https://example.invalid/2.jpg'
+      ) &&
+      series.every((group) => !Object.hasOwn(group, 'productImage')),
   },
   {
     name: 'シリーズ要約に書籍配列を重複保存しない',
@@ -182,6 +210,61 @@ const checks = [
   {
     name: '混在表記（進撃の巨人（1）+ 進撃の巨人 2）を統合する',
     ok: mixedNotation.size === 1 && mixedNotation.get('進撃の巨人')?.count === 3,
+  },
+  {
+    name: 'シリーズ名末尾の波ダッシュ有無で分裂せず波ダッシュありへ寄せる（響）',
+    ok:
+      trailingWaveVariant.size === 1 &&
+      JSON.stringify(trailingWaveVariant.get('響～小説家になる方法～')?.ownedVolumes) ===
+        JSON.stringify([1, 2]),
+  },
+  {
+    name: 'HTML entity入りタイトルの&を復元してseriesKeyにする（FRONT MISSION）',
+    ok:
+      htmlEntityTitle.volume === 1 &&
+      htmlEntityTitle.seriesKey === 'FRONT MISSION DOG LIFE & DOG STYLE' &&
+      htmlEntityTitle.imprint === 'デジタル版ヤングガンガンコミックス',
+  },
+  {
+    name: '旧保存minimalのHTML entity入りseriesKeyも再構築時に復元する',
+    ok: (() => {
+      const rebuilt = summarizeNormalizedBooks([
+        {
+          asin: 'FM1',
+          seriesKey: 'FRONT MISSION DOG LIFE &amp; DOG STYLE',
+          volume: 1,
+          imprint: 'デジタル版ヤングガンガンコミックス',
+          author: '太田垣康男',
+        },
+      ]);
+      return rebuilt[0]?.seriesKey === 'FRONT MISSION DOG LIFE & DOG STYLE';
+    })(),
+  },
+  {
+    name: '全角英字を含む2Dタイトルでも括弧巻数を認識する（ミラーマン2D）',
+    ok:
+      mirrorMan2dTitle.volume === 6 &&
+      mirrorMan2dTitle.seriesKey === 'ミラーマン2D' &&
+      mirrorMan2dTitle.imprint === 'ヒーローズコミックス',
+  },
+  {
+    name: '正タイトル末尾の閉じハイフンをseriesKeyに保持する（SHOCKER SIDE）',
+    ok:
+      shockerSide.volume === 1 &&
+      shockerSide.seriesKey === '真の安らぎはこの世になく -シン・仮面ライダー SHOCKER SIDE-',
+  },
+  {
+    name: '巻数区切りだけの末尾ハイフンはseriesKeyから落とす',
+    ok: simpleDashSeparator.volume === 1 && simpleDashSeparator.seriesKey === 'テスト作品',
+  },
+  {
+    name: '無印1巻と2巻以降の組み合わせは無印を1巻として扱う',
+    ok:
+      JSON.stringify(
+        unnumberedFirstVolumes.get('異種族レビュアーズコミックアンソロジー ～ダークネス～')?.ownedVolumes
+      ) === JSON.stringify([1, 2]) &&
+      JSON.stringify(unnumberedFirstVolumes.get('限界OL霧切ギリ子')?.ownedVolumes) ===
+        JSON.stringify([1, 2]),
   },
   {
     name: '巻数直後が【】等の括弧でも巻数を認識する',
@@ -234,16 +317,23 @@ const checks = [
       JSON.stringify(computeOwnedRanges([5])) === JSON.stringify([[5, 5]]),
   },
   {
-    name: '欠番は最小〜最高巻の間の抜けだけを返す（最高巻より先は含めない）',
+    name: '欠番は1巻〜最高巻の間の抜けを返す（最高巻より先は含めない）',
     ok:
       JSON.stringify(computeMissingVolumes([1, 2, 3, 5, 6])) === JSON.stringify([4]) &&
-      JSON.stringify(computeMissingVolumes([2, 4, 6])) === JSON.stringify([3, 5]),
+      JSON.stringify(computeMissingVolumes([2, 4, 6])) === JSON.stringify([1, 3, 5]) &&
+      JSON.stringify(computeMissingVolumes([2])) === JSON.stringify([1]),
   },
   {
-    name: '抜けの無い連番・単巻は欠番なし',
+    name: '抜けの無い1巻起点の連番・1巻単巻は欠番なし',
     ok:
       computeMissingVolumes([1, 2, 3]).length === 0 &&
-      computeMissingVolumes([5]).length === 0,
+      computeMissingVolumes([1]).length === 0,
+  },
+  {
+    name: '0巻所有シリーズは0巻を欠番扱いしないが1巻抜けは欠番にする',
+    ok:
+      computeMissingVolumes([0]).length === 0 &&
+      JSON.stringify(computeMissingVolumes([0, 2, 3])) === JSON.stringify([1]),
   },
   {
     name: '複数版所有（巻番号重複×2レーベル）は版ごとに分割する',
@@ -279,6 +369,38 @@ const checks = [
   {
     name: '末尾が巻数だけの括弧（MOONLIGHT MILE(19)）は版名にしない',
     ok: splitSeriesAndVolume('MOONLIGHT MILE(19)').imprint === '',
+  },
+  // --- 版修飾タグによる分割テスト ---
+  {
+    name: '通常版と電子限定特装版を分割する（うちの師匠はしっぽがない）',
+    ok: (() => {
+      const s = buildSeriesSummary([
+        { title: 'うちの師匠はしっぽがない 1巻 (バンチコミックス)', authors: ['TNSK'], asin: 'S1' },
+        { title: 'うちの師匠はしっぽがない 2巻 (バンチコミックス)', authors: ['TNSK'], asin: 'S2' },
+        { title: 'うちの師匠はしっぽがない 3巻 (バンチコミックス)', authors: ['TNSK'], asin: 'S3' },
+        { title: 'うちの師匠はしっぽがない【電子限定特装版】 1巻 (バンチコミックス)', authors: ['TNSK'], asin: 'D1' },
+        { title: 'うちの師匠はしっぽがない【電子限定特装版】 2巻 (バンチコミックス)', authors: ['TNSK'], asin: 'D2' },
+        { title: 'うちの師匠はしっぽがない【電子限定特装版】 3巻 (バンチコミックス)', authors: ['TNSK'], asin: 'D3' },
+      ]).filter((g) => /うちの師匠/.test(g.title));
+      const normal = s.find((g) => !g.key.includes('電子限定'));
+      const special = s.find((g) => g.key.includes('電子限定'));
+      return s.length === 2 && !!normal && !!special &&
+        normal.count === 3 && special.count === 3;
+    })(),
+  },
+  {
+    name: '【電子版】だけでは分割しない（全Kindle書籍に付く汎用タグ）',
+    ok: (() => {
+      const s = splitSeriesAndVolume('テスト作品【電子版】 1巻 (テストコミックス)');
+      return s.imprint === 'テストコミックス';
+    })(),
+  },
+  {
+    name: '【カバーイラストBOOK付】等の特典表記では分割しない',
+    ok: (() => {
+      const s = splitSeriesAndVolume('つぐもも : 24 【カバーイラストBOOK付】 (アクションコミックス)');
+      return s.imprint === 'アクションコミックス';
+    })(),
   },
   // --- 保存軽量化（minimal 書誌）と簡易マージの回帰テスト ---
   {

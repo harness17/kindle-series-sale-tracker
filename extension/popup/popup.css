@@ -49,8 +49,20 @@ h2 {
 
 .toolbar {
   display: grid;
-  grid-template-columns: 1fr 1fr 64px 64px;
   gap: 8px;
+}
+
+.toolbar-scan {
+  grid-template-columns: 1fr 1fr;
+}
+
+.toolbar-nav {
+  grid-template-columns: 1fr 1fr 64px 64px;
+}
+
+.toolbar-bulk {
+  grid-template-columns: 1fr;
+  margin-top: 8px;
 }
 
 button {
@@ -104,6 +116,12 @@ button:hover {
   margin-bottom: 4px;
 }
 
+.title-badges {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
 .series-title strong {
   font-size: 13px;
   line-height: 1.35;
@@ -118,10 +136,56 @@ button:hover {
   font-size: 11px;
 }
 
+.badge.priority-badge {
+  background: #fff3cd;
+  color: #8a5a00;
+}
+
+.series-item.priority {
+  border-color: #f0c36d;
+}
+
 .series-meta {
   color: #5d6873;
   font-size: 12px;
   line-height: 1.5;
+}
+
+.catalog-status {
+  margin-top: 4px;
+  color: #3d4852;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.catalog-status a {
+  color: #075985;
+  text-decoration: none;
+}
+
+.catalog-status a:hover {
+  text-decoration: underline;
+}
+
+.sale-text {
+  color: #b42318;
+  font-weight: 700;
+}
+
+.series-body {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.thumbnail {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 60px;
+  object-fit: cover;
+  border: 1px solid #d4d8dd;
+  border-radius: 4px;
+  background: #eef4ed;
 }
 
 .series-actions {

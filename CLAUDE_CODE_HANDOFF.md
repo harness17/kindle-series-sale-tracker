@@ -1,0 +1,52 @@
+## 2026-05-31 19:15 追記（dev build自動反映ルール — Codex 作成）
+
+- 対象: `H:\ClaudeCode\Browser-Extensions\kindle-series-sale-tracker`
+- 作成者: Codex
+- 主題: 今後 `extension/` または `manifests/` を変更したら、最終応答前に `dist/dev/chrome` と `dist/dev/firefox` へ反映するルールをharnessへ登録した。
+- 触ってよい範囲: `AGENTS.md`, `.claude/rules/project-collaboration-profile.md`
+- 触ってはいけない範囲: 既存の未コミット実装修正や未追跡ローカル設定を巻き戻さない。
+- 完成条件:
+  - Codex が読む `AGENTS.md` に `.\scripts\build-dev.ps1 -Target all` の実行条件がある。
+  - ClaudeCode が読む project profile に同じ実行条件がある。
+  - 今回時点でも `dist/dev/chrome` と `dist/dev/firefox` が再生成済み。
+- 変更内容:
+  - `AGENTS.md` の検証コマンドへ `.\scripts\build-dev.ps1 -Target all` を追加。
+  - `.claude/rules/project-collaboration-profile.md` に、`extension/` または `manifests/` 変更後はdev buildを完了条件に含めるルールを追加。
+- セルフ verify: `.\scripts\build-dev.ps1 -Target all` 成功。
+- 実動確認: `rg` で `AGENTS.md` と `.claude/rules/project-collaboration-profile.md` の登録文言を確認。
+- レビュー観点:
+  - 常駐ファイル監視hookではなく、Codex/ClaudeCodeが読むharness ruleとして登録している。
+- 未解決:
+  - OS常駐watcherやgit hookが必要なら別途ユーザー確認が必要。
+- 次アクション:
+  - 今後のコード変更では、verifyまたは最終確認時に `.\scripts\build-dev.ps1 -Target all` を実行する。
+
+## 2026-05-31 18:48 追記（Kindle続刊判定の版分割照合修正 — Codex 作成）
+
+- 対象: `H:\ClaudeCode\Browser-Extensions\kindle-series-sale-tracker`
+- 作成者: Codex
+- 主題: `うちの師匠はしっぽがない` の通常版/電子限定特装版が続刊なしになる問題を、続刊照合へ装飾なし `seriesKey` を渡すことで修正した。
+- 触ってよい範囲: `extension/options/options.js`, `extension/shared/catalog-probe.js`, `extension/shared/kindle-library.js`, `verify-catalog-probe.mjs`, `verify-kindle-library.mjs`
+- 触ってはいけない範囲: 既存の未追跡 `.claude/`, `.codex/`, `.mcp.json`, `CLAUDE.md`, `repro-tmp.mjs` と、Codexが今回確認だけした既存差分は勝手に巻き戻さない。
+- 完成条件:
+  - 通常版 `うちの師匠はしっぽがない（アフタヌーンコミックス）` が通常版13巻を `has-next` と判定する。
+  - 電子限定特装版 `うちの師匠はしっぽがない（電子限定特装版/アフタヌーンコミックス）` が電子限定特装版13巻を `has-next` と判定する。
+  - 既存の別レーベル新装版、単話版、スピンオフ除外の回帰を壊さない。
+  - Amazon検索fetch失敗や空結果は従来どおり `unknown` / `no-next` に留め、raw例外をUIへ出さない。
+- 変更内容:
+  - `extension/options/options.js` の `detectNextVolume` 呼び出しへ `seriesKey: s.seriesKey` を追加。
+  - `verify-catalog-probe.mjs` に通常版/電子限定特装版それぞれの13巻検出回帰テストを追加。
+  - 既にClaudeCode側で入っていた版分割・`seriesKey`保持方針は維持。
+- セルフ verify:
+  - `node .\verify-catalog-probe.mjs` 成功。
+  - `node .\verify-kindle-library.mjs` 成功。
+  - `.\scripts\build-dev.ps1 -Target all` 成功。`dist/dev/chrome` と `dist/dev/firefox` に反映済み。
+  - `.\scripts\package-release.ps1 -Target all` 成功。Chrome/Firefox zip を再生成。
+- 実動確認: Amazonログインが必要なため実サイトfetchは未実施。今回の判定ロジックはfixture相当の単体テストで確認。
+- レビュー観点:
+  - `options.js` の一括照会キャンセル変更は既存差分として存在しており、今回の主修正ではない。必要なら別途レビューする。
+  - `dist/` の生成物はパッケージ検証で更新されるが、stageするかはリリース方針次第。
+- 未解決:
+  - 実Amazon検索HTML fixtureで `parseSearchResultsFromDoc` を検証する作業は未実施。
+- 次アクション:
+  - 必要ならClaudeCode側で差分全体をレビューし、stage対象を明示してから commit 判断する。

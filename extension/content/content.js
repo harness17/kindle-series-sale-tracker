@@ -299,6 +299,24 @@
     return data[api.STORAGE_KEY] || null;
   }
 
+  function preserveSeriesThumbnails(series, previousSeries, newBooks) {
+    const previousByKey = new Map((previousSeries || []).map((s) => [s.key, s]));
+    const freshByKey = new Map(api.summarizeNormalizedBooks(newBooks || []).map((s) => [s.key, s]));
+    return series.map((s) => {
+      const previous = previousByKey.get(s.key);
+      const fresh = freshByKey.get(s.key);
+      const freshIsCurrent = fresh?.highestVolume === s.highestVolume;
+      return {
+        ...s,
+        latestOwnedThumbnailUrl:
+          (freshIsCurrent && fresh.latestOwnedThumbnailUrl) ||
+          previous?.latestOwnedThumbnailUrl ||
+          s.latestOwnedThumbnailUrl ||
+          '',
+      };
+    });
+  }
+
   // mode: 'full' | 'simple'
   async function collectKindleBooks(mode) {
     const csrfToken = ensureContext();
@@ -319,12 +337,12 @@
       const newBooks = await collectRecentBooks(csrfToken, knownAsins);
       const merged = api.mergeScan(existingMinimal, newBooks);
       minimalBooks = merged.minimalBooks;
-      series = merged.series;
+      series = preserveSeriesThumbnails(merged.series, existing.series, newBooks);
       addedNote = `新着${merged.added}冊を追加`;
     } else {
       const normalized = await collectAllBooks(csrfToken);
       minimalBooks = normalized.map((b) => api.toMinimalBook(b));
-      series = api.summarizeNormalizedBooks(minimalBooks);
+      series = api.summarizeNormalizedBooks(normalized);
     }
 
     const result = {
