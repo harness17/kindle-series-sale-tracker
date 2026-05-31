@@ -26,23 +26,34 @@
       nbsp: ' ',
     };
 
-    return String(value ?? '')
-      .replace(/&#x([0-9a-f]+);/gi, (match, hex) => {
-        const codePoint = Number.parseInt(hex, 16);
-        return Number.isFinite(codePoint) && codePoint <= 0x10ffff
-          ? String.fromCodePoint(codePoint)
-          : match;
-      })
-      .replace(/&#(\d+);/g, (match, decimal) => {
-        const codePoint = Number.parseInt(decimal, 10);
-        return Number.isFinite(codePoint) && codePoint <= 0x10ffff
-          ? String.fromCodePoint(codePoint)
-          : match;
-      })
-      .replace(/&([a-z]+);/gi, (match, name) => {
-        const entity = namedEntities[name.toLowerCase()];
-        return entity === undefined ? match : entity;
-      });
+    const decodeOnce = (text) =>
+      String(text ?? '')
+        .replace(/&#x([0-9a-f]+);/gi, (match, hex) => {
+          const codePoint = Number.parseInt(hex, 16);
+          return Number.isFinite(codePoint) && codePoint <= 0x10ffff
+            ? String.fromCodePoint(codePoint)
+            : match;
+        })
+        .replace(/&#(\d+);/g, (match, decimal) => {
+          const codePoint = Number.parseInt(decimal, 10);
+          return Number.isFinite(codePoint) && codePoint <= 0x10ffff
+            ? String.fromCodePoint(codePoint)
+            : match;
+        })
+        .replace(/&([a-z]+);/gi, (match, name) => {
+          const entity = namedEntities[name.toLowerCase()];
+          return entity === undefined ? match : entity;
+        });
+
+    // Amazon の書誌が二重エンコード（&amp;amp; 等）の場合があるため、
+    // 変化しなくなるまで復号する。単一エンコードには冪等で安全。上限で暴走防止。
+    let current = String(value ?? '');
+    for (let i = 0; i < 5; i += 1) {
+      const next = decodeOnce(current);
+      if (next === current) break;
+      current = next;
+    }
+    return current;
   }
 
   function normalizeText(value) {
@@ -591,6 +602,7 @@
     computeMissingVolumes,
     splitSeriesAndVolume,
     normalizeSeriesKey,
+    decodeHtmlEntities,
     seriesKeyFromTitle: (title) => normalizeSeriesKey(splitSeriesAndVolume(title).seriesKey),
   };
 });

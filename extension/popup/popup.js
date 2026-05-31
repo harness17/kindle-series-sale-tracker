@@ -50,7 +50,13 @@
       const priority = data[PRIORITY_KEY] || {};
       scan.series = scan.series
         .filter((s) => !completed[s.key])
-        .map((s) => ({ ...s, catalog: cache[s.key] || null, priority: !!priority[s.key] }));
+        // 保存済みタイトルが二重エンコード（&amp;amp; 等）のまま残るケースを表示時に復号する。
+        .map((s) => ({
+          ...s,
+          title: api.decodeHtmlEntities(s.title),
+          catalog: cache[s.key] || null,
+          priority: !!priority[s.key],
+        }));
     }
     return scan;
   }

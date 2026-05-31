@@ -13,6 +13,7 @@ const {
   computeOwnedRanges,
   computeMissingVolumes,
   splitSeriesAndVolume,
+  decodeHtmlEntities,
 } = require('./extension/shared/kindle-library.js');
 
 const payload = JSON.parse(readFileSync('fixtures/ownership-response.json', 'utf8'));
@@ -239,6 +240,16 @@ const checks = [
       ]);
       return rebuilt[0]?.seriesKey === 'FRONT MISSION DOG LIFE & DOG STYLE';
     })(),
+  },
+  {
+    name: '二重エンコード（&amp;amp;）のタイトルも&まで復号する（不動点復号）',
+    ok:
+      decodeHtmlEntities('FRONT MISSION DOG LIFE &amp;amp; DOG STYLE') ===
+        'FRONT MISSION DOG LIFE & DOG STYLE' &&
+      decodeHtmlEntities('A &amp; B') === 'A & B' &&
+      decodeHtmlEntities('A & B') === 'A & B' &&
+      splitSeriesAndVolume('FRONT MISSION DOG LIFE &amp;amp; DOG STYLE 1巻').seriesKey ===
+        'FRONT MISSION DOG LIFE & DOG STYLE',
   },
   {
     name: '全角英字を含む2Dタイトルでも括弧巻数を認識する（ミラーマン2D）',
