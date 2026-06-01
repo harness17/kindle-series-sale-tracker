@@ -90,7 +90,7 @@
         .map((s) => ({
           ...s,
           title: api.decodeHtmlEntities(s.title),
-          catalog: cache[s.key] || null,
+          catalog: card.reconcileCatalog(cache[s.key] || null, s.highestVolume),
           priority: !!priority[s.key],
         }));
     }
@@ -234,8 +234,9 @@
   }
 
   function simpleTargets() {
+    // group.catalog は getLastScan で reconcile 済み。確定 has-next のみ除外し stale は含める。
     return displayedGroups(currentScan).filter(
-      (group) => Number.isFinite(group.highestVolume) && group.catalog?.status !== 'has-next'
+      (group) => Number.isFinite(group.highestVolume) && !card.isConfirmedHasNext(group.catalog)
     );
   }
 
