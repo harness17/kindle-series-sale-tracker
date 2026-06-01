@@ -120,6 +120,11 @@
     render();
   }
 
+  // 表示・判定はすべて reconcile 済みビューを通す（生 cache を直接参照しない）。
+  function catalogFor(s) {
+    return card.reconcileCatalog(cache[s.key], s.highestVolume);
+  }
+
   function passesFilter(s) {
     const q = els.search.value.trim();
     if (q && !`${s.title} ${s.author || ''}`.includes(q)) return false;
@@ -130,7 +135,7 @@
     const status = els.filterStatus.value;
     if (status !== 'all') {
       if (completed[s.key]) return false;
-      const cached = cache[s.key];
+      const cached = catalogFor(s);
       if (status === 'has-next' && cached?.status !== 'has-next') return false;
       if (status === 'no-next' && cached?.status !== 'no-next') return false;
       if (status === 'unchecked' && cached) return false;
@@ -147,7 +152,7 @@
       if (by === 'volume') return (b.highestVolume || 0) - (a.highestVolume || 0);
       if (by === 'title') return a.title.localeCompare(b.title, 'ja');
       if (by === 'discount') {
-        const d = card.discountValue(cache[b.key]) - card.discountValue(cache[a.key]);
+        const d = card.discountValue(catalogFor(b)) - card.discountValue(catalogFor(a));
         if (d !== 0) return d;
         return a.title.localeCompare(b.title, 'ja');
       }
@@ -200,7 +205,7 @@
     if (completed[s.key]) row.classList.add('completed');
     if (priority[s.key]) row.classList.add('priority');
     if (excluded[s.key]) row.classList.add('excluded');
-    const cached = cache[s.key];
+    const cached = catalogFor(s);
     if (cached?.status === 'has-next') row.classList.add('has-next');
     if (card.discountValue(cached) > 0) row.classList.add('on-sale');
     const offer = card.resolvePrimaryOffer(cached);
@@ -232,7 +237,7 @@
     const checkBtn = document.createElement('button');
     checkBtn.type = 'button';
     checkBtn.className = 'secondary';
-    checkBtn.textContent = cache[s.key] ? iconLabel('↻', '再確認') : iconLabel('↻', '次巻を確認');
+    checkBtn.textContent = cached ? iconLabel('↻', '再確認') : iconLabel('↻', '次巻を確認');
     checkBtn.disabled = !!completed[s.key]; // 完結なら照会不要
     checkBtn.addEventListener('click', () => checkNext(s, checkBtn));
     actions.appendChild(checkBtn);
@@ -242,7 +247,7 @@
     completeBtn.className = 'secondary complete-btn';
     completeBtn.textContent = completed[s.key] ? iconLabel('○', '完結解除') : iconLabel('✓', '完結にする');
     // 続刊あり確定のシリーズは完結にできない（完結解除は常に許可）。
-    if (!completed[s.key] && cache[s.key]?.status === 'has-next') {
+    if (!completed[s.key] && cached?.status === 'has-next') {
       completeBtn.disabled = true;
       completeBtn.title = '続刊があるため完結にできません';
     }
@@ -325,7 +330,7 @@
 
   async function toggleCompleted(s) {
     // 続刊あり確定のシリーズは完結にできない（解除は許可）。
-    if (!completed[s.key] && cache[s.key]?.status === 'has-next') return;
+    if (!completed[s.key] && catalogFor(s)?.status === 'has-next') return;
     if (completed[s.key]) {
       delete completed[s.key];
     } else {
@@ -360,7 +365,10 @@
   }
 
   function simpleTargets() {
-    return currentList().filter((s) => !completed[s.key] && !excluded[s.key] && cache[s.key]?.status !== 'has-next');
+    // 確定 has-next（未所持の次巻あり）だけ除外。stale（要再確認）・降格 no-next・未照会は含める。
+    return currentList().filter(
+      (s) => !completed[s.key] && !excluded[s.key] && !card.isConfirmedHasNext(catalogFor(s))
+    );
   }
 
   async function runBulkProbe(targets, options) {
