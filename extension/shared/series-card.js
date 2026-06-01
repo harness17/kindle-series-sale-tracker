@@ -23,7 +23,8 @@
   }
 
   function resolvePrimaryOffer(cached) {
-    if (!cached || cached.status !== 'has-next') return null;
+    // stale（要再確認）は next 巻を既に所持しているため、購入オファーとして出さない。
+    if (!cached || cached.status !== 'has-next' || cached.stale) return null;
     return {
       volume: cached.nextVolume,
       title: cached.nextTitle,
@@ -77,6 +78,8 @@
     appendSpace(targetEl);
     if (!cached) {
       appendBadge(targetEl, 'badge', '未照会');
+    } else if (cached.stale) {
+      appendBadge(targetEl, 'badge recheck', '要再確認');
     } else if (cached.status === 'has-next') {
       appendBadge(targetEl, 'badge next', `続刊 ${cached.nextVolume}巻`);
       if (cached.nextUrl) {
@@ -96,10 +99,8 @@
 
     const showLatest =
       cached &&
-      cached.status === 'has-next' &&
       cached.latestVolume &&
-      offer &&
-      cached.latestVolume !== offer.volume;
+      (cached.stale || (cached.status === 'has-next' && offer && cached.latestVolume !== offer.volume));
     if (showLatest) {
       appendSpace(targetEl);
       const date = cached.latestReleaseDate ? ` ${cached.latestReleaseDate}` : '';
