@@ -20,6 +20,8 @@
     filterPriority: document.getElementById('filterPriority'),
     filterStatus: document.getElementById('filterStatus'),
     filterHideCompleted: document.getElementById('filterHideCompleted'),
+    filterExcluded: document.getElementById('filterExcluded'),
+    filterSale: document.getElementById('filterSale'),
     checkVisible: document.getElementById('checkVisible'),
     checkSimple: document.getElementById('checkSimple'),
     clearCache: document.getElementById('clearCache'),
@@ -134,6 +136,8 @@
       if (status === 'unchecked' && cached) return false;
     }
     if (els.filterHideCompleted.checked && completed[s.key]) return false;
+    if (els.filterExcluded.checked && excluded[s.key]) return false;
+    if (els.filterSale.checked && card.discountValue(cache[s.key]) <= 0) return false;
     return true;
   }
 
@@ -197,6 +201,8 @@
     if (priority[s.key]) row.classList.add('priority');
     if (excluded[s.key]) row.classList.add('excluded');
     const cached = cache[s.key];
+    if (cached?.status === 'has-next') row.classList.add('has-next');
+    if (card.discountValue(cached) > 0) row.classList.add('on-sale');
     const offer = card.resolvePrimaryOffer(cached);
     const thumbnailUrl = offer?.thumbnailUrl || cached?.latestThumbnailUrl || s.latestOwnedThumbnailUrl || '';
     if (thumbnailUrl) row.classList.add('has-thumbnail');
@@ -448,6 +454,8 @@
   els.filterPriority.addEventListener('change', render);
   els.filterStatus.addEventListener('change', render);
   els.filterHideCompleted.addEventListener('change', render);
+  els.filterExcluded.addEventListener('change', render);
+  els.filterSale.addEventListener('change', render);
   els.checkVisible.addEventListener('click', startFullBulk);
   els.checkSimple.addEventListener('click', startSimpleBulk);
   els.clearCache.addEventListener('click', clearCache);

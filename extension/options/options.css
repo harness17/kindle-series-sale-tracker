@@ -24,6 +24,7 @@
   --badge-completed-bg: #ecebff;
   --badge-completed-fg: #44d;
   --priority-border: #f0c36d;
+  --status-next-border: #2f855a;
 }
 
 :root[data-theme="dark"] {
@@ -51,6 +52,7 @@
   --badge-completed-bg: #2e2b54;
   --badge-completed-fg: #c9c4ff;
   --priority-border: #d69a45;
+  --status-next-border: #68d391;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -79,6 +81,7 @@
     --badge-completed-bg: #2e2b54;
     --badge-completed-fg: #c9c4ff;
     --priority-border: #d69a45;
+    --status-next-border: #68d391;
   }
 }
 
@@ -129,9 +132,7 @@ body {
 }
 
 .controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  display: grid;
   gap: 12px;
   padding: 12px 24px;
   border-bottom: 1px solid var(--line);
@@ -141,10 +142,25 @@ body {
   z-index: 1;
 }
 
+.toolbar-top,
+.toolbar-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.toolbar-top {
+  gap: 12px;
+}
+
+.toolbar-filters {
+  gap: 8px;
+}
+
 .controls input[type="search"],
 .controls select,
 .theme-control select {
-  flex: 1 1 260px;
   padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -153,20 +169,48 @@ body {
   font-size: 14px;
 }
 
+.controls input[type="search"] {
+  flex: 1 1 280px;
+  min-width: 180px;
+}
+
 .controls select,
 .theme-control select {
   flex: 0 1 auto;
 }
 
-.controls label {
+.select-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 13px;
   color: var(--muted);
 }
 
-.controls .check {
+.chip {
   display: inline-flex;
   align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
   gap: 6px;
+  padding: 6px 10px;
+  background: var(--control-bg);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+}
+
+.chip input[type="checkbox"] {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.chip:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
 }
 
 button {
@@ -205,6 +249,8 @@ button:disabled {
 
 .series {
   border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-left-color: transparent;
   border-radius: 8px;
   padding: 10px 14px;
   background: var(--card);
@@ -212,6 +258,7 @@ button:disabled {
   grid-template-columns: 1fr auto;
   gap: 4px 16px;
   align-items: center;
+  position: relative;
 }
 
 .series.has-thumbnail {
@@ -282,6 +329,7 @@ button:disabled {
 .badge.sale {
   background: var(--accent-soft);
   color: var(--accent-strong);
+  font-weight: 700;
 }
 
 .badge.completed {
@@ -304,6 +352,23 @@ button:disabled {
 
 .series.priority {
   border-color: var(--priority-border);
+}
+
+.series.has-next {
+  border-left-color: var(--status-next-border);
+}
+
+.series.on-sale {
+  border-left-color: var(--accent);
+  padding-top: 38px;
+}
+
+.series.on-sale .badge.sale {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  border: 1px solid var(--accent);
+  box-shadow: 0 2px 8px var(--shadow);
 }
 
 .actions {

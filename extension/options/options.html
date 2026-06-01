@@ -21,34 +21,38 @@
     </header>
 
     <section class="controls">
-      <input id="search" type="search" placeholder="シリーズ名・著者で絞り込み" />
-      <label>並び替え
-        <select id="sort">
-          <option value="count">所有冊数（多い順）</option>
-          <option value="volume">最高巻（大きい順）</option>
-          <option value="discount">割引率（高い順）</option>
-          <option value="title">タイトル（あいうえお順）</option>
-        </select>
-      </label>
-      <label class="check"><input id="filterMissing" type="checkbox" /> 欠番ありのみ</label>
-      <label class="check"><input id="filterPriority" type="checkbox" /> 優先のみ</label>
-      <label>続刊
-        <select id="filterStatus">
-          <option value="all">すべて</option>
-          <option value="has-next">続刊あり</option>
-          <option value="no-next">続刊なし</option>
-          <option value="unchecked">未照会</option>
-        </select>
-      </label>
-      <label class="check"><input id="filterHideCompleted" type="checkbox" /> 完結を隠す</label>
-      <button id="checkVisible" type="button" class="secondary">↻ 一括続刊再確認</button>
-      <button id="checkSimple" type="button" class="secondary">＋ 新刊チェック（簡易）</button>
-    </section>
+      <div class="toolbar-top">
+        <input id="search" type="search" placeholder="シリーズ名・著者で絞り込み" />
+        <label class="select-control">並び替え
+          <select id="sort">
+            <option value="count">所有冊数（多い順）</option>
+            <option value="volume">最高巻（大きい順）</option>
+            <option value="discount">割引率（高い順）</option>
+            <option value="title">タイトル（あいうえお順）</option>
+          </select>
+        </label>
+        <button id="checkVisible" type="button" class="secondary">↻ 一括続刊再確認</button>
+        <button id="checkSimple" type="button" class="secondary">＋ 新刊チェック（簡易）</button>
+      </div>
 
-    <section class="controls">
-      <button id="clearCache" type="button" class="secondary">× 照会キャッシュをクリア</button>
-      <button id="clearScan" type="button" class="secondary">× スキャン結果をクリア</button>
-      <span class="summary">※完結・優先フラグは保持されます</span>
+      <div class="toolbar-filters">
+        <label class="chip"><input id="filterMissing" type="checkbox" /> 欠番あり</label>
+        <label class="chip"><input id="filterPriority" type="checkbox" /> 優先のみ</label>
+        <label class="select-control">続刊
+          <select id="filterStatus">
+            <option value="all">すべて</option>
+            <option value="has-next">続刊あり</option>
+            <option value="no-next">続刊なし</option>
+            <option value="unchecked">未照会</option>
+          </select>
+        </label>
+        <label class="chip"><input id="filterHideCompleted" type="checkbox" /> 完結を隠す</label>
+        <label class="chip"><input id="filterExcluded" type="checkbox" /> 除外を隠す</label>
+        <label class="chip"><input id="filterSale" type="checkbox" /> セール中</label>
+        <button id="clearCache" type="button" class="secondary">× 照会キャッシュをクリア</button>
+        <button id="clearScan" type="button" class="secondary">× スキャン結果をクリア</button>
+        <span class="summary">※完結・優先フラグは保持されます</span>
+      </div>
     </section>
 
     <main id="list" class="list"></main>
