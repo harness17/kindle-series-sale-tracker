@@ -366,15 +366,6 @@ button:disabled {
 
 .series.on-sale {
   border-left-color: var(--accent);
-  padding-top: 38px;
-}
-
-.series.on-sale .badge.sale {
-  position: absolute;
-  top: 10px;
-  left: 14px;
-  border: 1px solid var(--accent);
-  box-shadow: 0 2px 8px var(--shadow);
 }
 
 .actions {
