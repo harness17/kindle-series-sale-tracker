@@ -224,7 +224,7 @@
     cache[group.key] = { ...result, checkedAt: Date.now() };
     await chrome.storage.local.set({ [CACHE_KEY]: cache });
 
-    group.catalog = cache[group.key];
+    group.catalog = card.reconcileCatalog(cache[group.key], group.highestVolume);
     render(currentScan);
     setStatus('続刊・価格の照会結果を保存しました。');
   }
@@ -266,7 +266,7 @@
       triggerButton.textContent = `${label}中… ${done}/${targets.length}`;
       setStatus(`${group.title} の続刊と価格を確認しています…`);
       cache[group.key] = { ...(await probeSeries(group)), checkedAt: Date.now() };
-      group.catalog = cache[group.key];
+      group.catalog = card.reconcileCatalog(cache[group.key], group.highestVolume);
       if (done % 10 === 0) await chrome.storage.local.set({ [CACHE_KEY]: cache });
       if (done < targets.length) {
         await new Promise((resolve) => setTimeout(resolve, REQUEST_DELAY_MS));
