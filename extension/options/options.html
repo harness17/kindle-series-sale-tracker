@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kindle シリーズ続刊トラッカー</title>
+    <script src="../shared/theme-init.js"></script>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <header id="pageTop" class="topbar">
+      <h1>Kindle シリーズ続刊トラッカー</h1>
+      <div id="summary" class="summary">読み込み中…</div>
+      <label class="theme-control">テーマ
+        <select id="themeToggle">
+          <option value="auto">OSに合わせる</option>
+          <option value="light">ライト</option>
+          <option value="dark">ダーク</option>
+        </select>
+      </label>
+    </header>
+
+    <section class="controls">
+      <div class="toolbar-top">
+        <input id="search" type="search" placeholder="シリーズ名・著者で絞り込み" />
+        <label class="select-control">並び替え
+          <select id="sort">
+            <option value="count">所有冊数（多い順）</option>
+            <option value="volume">最高巻（大きい順）</option>
+            <option value="discount">割引率（高い順）</option>
+            <option value="title">タイトル（あいうえお順）</option>
+          </select>
+        </label>
+        <button id="checkVisible" type="button" class="secondary">↻ 一括続刊再確認</button>
+        <button id="checkSimple" type="button" class="secondary">＋ 新刊チェック（簡易）</button>
+      </div>
+
+      <div class="toolbar-filters">
+        <label class="chip"><input id="filterMissing" type="checkbox" /> 欠番あり</label>
+        <label class="chip"><input id="filterPriority" type="checkbox" /> 優先のみ</label>
+        <label class="select-control">続刊
+          <select id="filterStatus">
+            <option value="all">すべて</option>
+            <option value="has-next">続刊あり</option>
+            <option value="no-next">続刊なし</option>
+            <option value="unchecked">未照会</option>
+          </select>
+        </label>
+        <label class="chip"><input id="filterHideCompleted" type="checkbox" /> 完結を隠す</label>
+        <label class="chip"><input id="filterExcluded" type="checkbox" /> 除外を隠す</label>
+        <label class="chip"><input id="filterSale" type="checkbox" /> セール中</label>
+        <button id="clearCache" type="button" class="secondary">× 照会キャッシュをクリア</button>
+        <button id="clearScan" type="button" class="secondary">× スキャン結果をクリア</button>
+        <span class="summary">※完結・優先フラグは保持されます</span>
+      </div>
+    </section>
+
+    <main id="list" class="list"></main>
+    <a class="top-link" href="#pageTop">↑ トップへ</a>
+
+    <script src="../shared/kindle-library.js"></script>
+    <script src="../shared/catalog-probe.js"></script>
+    <script src="../shared/series-card.js"></script>
+    <script src="options.js"></script>
+  </body>
+</html>
