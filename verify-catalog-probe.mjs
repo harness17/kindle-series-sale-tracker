@@ -6,6 +6,7 @@ const {
   extractSearchResultOffer,
   normalizePublicationDate,
 } = require('./extension/shared/catalog-probe.js');
+const { reconcileCatalog, isConfirmedHasNext } = require('./extension/shared/series-card.js');
 
 const checks = [
   {
@@ -385,6 +386,58 @@ const checks = [
       );
       return r.status === 'has-next' && r.nextVolume === 13 && r.nextUrl === 'special13';
     })(),
+  },
+  // --- reconcileCatalog: 所持更新時の続刊情報リコンサイル ---
+  {
+    name: 'reconcile: 次巻未所持なら変化なし（highestVolume < nextVolume）',
+    ok: (() => {
+      const cached = { status: 'has-next', nextVolume: 7, latestVolume: 10 };
+      const r = reconcileCatalog(cached, 6);
+      return r === cached;
+    })(),
+  },
+  {
+    name: 'reconcile: カタログ最大巻まで所持で続刊なしへ降格（highestVolume >= latestVolume）',
+    ok: (() => {
+      const r = reconcileCatalog({ status: 'has-next', nextVolume: 7, latestVolume: 7 }, 7);
+      return r.status === 'no-next' && r.reconciled === 'owned-to-latest' && !r.stale;
+    })(),
+  },
+  {
+    name: 'reconcile: 買った巻と最新巻の間に未知巻が残れば要再確認（nextVolume <= highestVolume < latestVolume）',
+    ok: (() => {
+      const r = reconcileCatalog({ status: 'has-next', nextVolume: 7, latestVolume: 10 }, 7);
+      return r.status === 'has-next' && r.stale === true && r.reconciled === 'stale';
+    })(),
+  },
+  {
+    name: 'reconcile: latestVolume 欠落の旧エントリは nextVolume 相当で降格扱い',
+    ok: (() => {
+      const r = reconcileCatalog({ status: 'has-next', nextVolume: 7 }, 7);
+      return r.status === 'no-next' && r.reconciled === 'owned-to-latest';
+    })(),
+  },
+  {
+    name: 'reconcile: has-next 以外（no-next / null）はそのまま返す',
+    ok: (() => {
+      const noNext = { status: 'no-next', latestVolume: 5 };
+      return reconcileCatalog(noNext, 99) === noNext && reconcileCatalog(null, 99) === null;
+    })(),
+  },
+  {
+    name: 'reconcile: highestVolume 不明なら変化なし',
+    ok: (() => {
+      const cached = { status: 'has-next', nextVolume: 7, latestVolume: 10 };
+      return reconcileCatalog(cached, undefined) === cached && reconcileCatalog(cached, NaN) === cached;
+    })(),
+  },
+  {
+    name: 'isConfirmedHasNext: 確定 has-next は true、stale / no-next / null は false',
+    ok:
+      isConfirmedHasNext({ status: 'has-next' }) === true &&
+      isConfirmedHasNext({ status: 'has-next', stale: true }) === false &&
+      isConfirmedHasNext({ status: 'no-next' }) === false &&
+      isConfirmedHasNext(null) === false,
   },
 ];
 

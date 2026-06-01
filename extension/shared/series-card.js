@@ -140,11 +140,38 @@
     }
   }
 
+  // 所持更新後、照会時点を基準に確定した続刊情報を新しい highestVolume で再評価する。
+  // 書き戻さず表示時に導出する純関数。cache の生データ（latestVolume 等）は変更しない。
+  //   ① has-next 以外 / highestVolume 不明        → cached をそのまま返す
+  //   ② highestVolume < nextVolume               → cached をそのまま返す（次巻未所持）
+  //   ③ highestVolume >= latestVolume            → no-next へ降格
+  //   ④ nextVolume <= highestVolume < latestVolume → stale（要再確認、status は has-next 維持）
+  //   ⑤ latestVolume 欠落の旧エントリ             → latestVolume=nextVolume とみなす（安全側=③で降格）
+  function reconcileCatalog(cached, highestVolume) {
+    if (!cached || cached.status !== 'has-next') return cached;
+    if (!Number.isFinite(highestVolume)) return cached;
+    const next = cached.nextVolume;
+    if (!Number.isFinite(next)) return cached;
+    if (highestVolume < next) return cached;
+    const latest = Number.isFinite(cached.latestVolume) ? cached.latestVolume : next;
+    if (highestVolume >= latest) {
+      return { ...cached, status: 'no-next', reconciled: 'owned-to-latest' };
+    }
+    return { ...cached, stale: true, reconciled: 'stale' };
+  }
+
+  // 「続刊あり確定」= 完結禁止・新刊チェック除外の対象。stale は確定扱いしない。
+  function isConfirmedHasNext(cached) {
+    return !!cached && cached.status === 'has-next' && !cached.stale;
+  }
+
   return {
     discountValue,
     formatRanges,
+    isConfirmedHasNext,
     probeSeries,
     probeSeriesWithUrl,
+    reconcileCatalog,
     renderStatusBlock,
     resolvePrimaryOffer,
     seriesSearchUrl,
