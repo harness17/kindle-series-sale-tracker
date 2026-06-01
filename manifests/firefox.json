@@ -25,7 +25,10 @@
   ],
   "browser_specific_settings": {
     "gecko": {
-      "id": "kindle-series-sale-tracker@harness"
+      "id": "kindle-series-sale-tracker@harness",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
     }
   }
 }
