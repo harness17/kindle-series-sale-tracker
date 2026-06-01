@@ -1,3 +1,59 @@
+## 2026-06-01 所持更新時の続刊情報リコンサイル（Claude Code 作成）
+
+- 対象: `feature/storage-lite-and-scan-modes`
+- 作成者: Claude Code（subagent-driven development、各タスク spec+quality 二段レビュー）
+- 主題: 続刊購入→簡易更新後に、古い続刊情報（has-next）が新 `highestVolume` に対して**通信なしで表示時に再評価**され、所持済みの巻が続刊として残らないようにした。
+- 設計/計画: `docs/superpowers/specs/2026-06-01-catalog-reconcile-on-ownership-update-design.md` / `docs/superpowers/plans/2026-06-01-catalog-reconcile-on-ownership-update.md`
+- 触った範囲: `extension/shared/series-card.js`（中核）, `extension/options/options.js`, `extension/popup/popup.js`, `extension/options/options.css`, `extension/popup/popup.css`, `verify-catalog-probe.mjs`
+- 触っていない範囲: `shared/kindle-library.js`・`catalog-probe.js` のロジック、`manifests/*`、`content/`・`background/`、theme/exclude/UI 系（並行セッションの領域）、個人の Kindle 蔵書データ
+- Current Design Line（変えてはいけない前提）:
+  - 再評価は純関数 `card.reconcileCatalog(cached, highestVolume)`。**書き戻さず表示時に導出**（cache 生データの latestVolume 等を温存）。トリガー不要＝開くたび最新 highestVolume で再判定。
+  - 分岐: `highestVolume<nextVolume`→変化なし／`>=latestVolume`→`no-next` 降格（`reconciled:'owned-to-latest'`）／その間→`{stale:true}`（`status:'has-next'` 維持・要再確認）／latestVolume 欠落は nextVolume 相当（安全側で降格）。
+  - cache への**書き込み**は生のまま（checkNext/runBulkProbe）。reconcile は読み取り経路のみ。
+  - 完結ボタン disable とハンドラガードは**同条件**（reconcile 済み `status==='has-next'`）。stale も has-next 維持なので完結禁止のまま（意図通り）。一方 simpleTargets（新刊チェック簡易）は `card.isConfirmedHasNext`（`has-next && !stale`）で**確定 has-next のみ除外**＝stale・降格 no-next・未照会は含める（この非対称は仕様）。
+  - options は `catalogFor(s)` ヘルパーで都度 reconcile、popup は `getLastScan` で1回 reconcile して下流共有。
+- 完成条件:
+  - 所持済みの next 巻が続刊あり表示として残らない（降格 or 要再確認）。
+  - stale では購入オファー（価格/割引/サムネ/続刊リンク）非表示・「要再確認」バッジ＋最新巻表示。
+  - 要再確認/確定 has-next は完結不可、降格 no-next は完結可。
+  - 新刊チェック（簡易）に stale・降格 no-next・未照会を含む。
+  - 回帰: verify 全 pass。
+- 変更内容（commit）:
+  - `d6f6cff` reconcileCatalog/isConfirmedHasNext + テスト7件 / `a1eeb97` stale 表示・オファー抑制 / `a050c82` options reconcile 集約 / `6b10747` セールフィルタも reconcile 経由 / `c87dae7` popup reconcile / `d69cfa8` 要再確認バッジ CSS
+- セルフ verify: `verify-kindle-library`(49) / `verify-catalog-probe`(29、reconcile 7件含む) 全 pass。`build-dev.ps1 -Target all` 同期済み（chrome/firefox）。
+- 実動確認: **未実施**。Amazon ログイン必須の Kindle 蔵書ページは agent-browser/playwright で取得不可のため。ロジックは Node 単体テストで全分岐カバー済みだが、DOM 描画（要再確認バッジ・ボタン活性）と所持更新→再評価の一連は user の実機目視が必要。
+- レビュー観点: stale の完結禁止が UI/ハンドラ両方で効くか / 簡易チェックに stale が入るか / 降格 no-next が「続刊なし」表示かつ完結可になるか / 既存の has-next 正常表示が壊れていないか。
+- 並行作業（ユーザー裁定済み: 同ブランチ併走）: 別セッションが theme/exclude/UI刷新/リアルタイムソート（`33913aa`/`3ad3c6a`/`1d244b5`/`5df6816` 等）を同ブランチに commit。線形履歴・個別 add でコミット混線なし。`options.js`/`options.css` は両セッションが触るが、reconcile 変更は cache 読み取り経路に限定し UI 変更と非重複。
+- 次アクション: user が `chrome://extensions/` で `dist/dev/chrome` を再読込し、続刊あり→購入→簡易更新→専用ページ更新の一連で「要再確認/続刊なし」へ変化するか目視確認。
+
+## 2026-06-01 除外フラグ・テーマ切替・UI刷新・リアルタイムソート（Claude Code 作成）
+
+- 対象: `feature/storage-lite-and-scan-modes`
+- 作成者: Claude Code（実装本体は Codex を MCP 経由で駆動、レビュー・commit は Claude Code）
+- 主題: 専用ページ(options)に除外フラグ／テーマ切替（ライト・ダーク・OS追従）／UI刷新（2段ツールバー・チップ・カード強調）／一括照会中の数件ごとリアルタイム再ソートを追加。popup はテーマ追従のみ。
+- 設計: `docs/superpowers/specs/2026-06-01-exclude-theme-ui-realtime-sort-design.md` / 計画 `docs/plans/2026-06-01-exclude-theme-ui-realtime-sort.md`
+- 触ってよい範囲: `extension/shared/theme-init.js`(新規), `extension/options/{options.html,options.css,options.js}`, `extension/popup/{popup.html,popup.css,popup.js}`
+- 触ってはいけない範囲: `shared/kindle-library.js`・`catalog-probe.js` のロジック、`manifests/*`、個人の Kindle 蔵書データ、並行 reconcile 作業のファイル
+- Current Design Line（変えてはいけない前提）:
+  - FOUC対策は MV3 CSP（`script-src 'self'`）でインラインscript不可 → 外部 `theme-init.js` を head で stylesheet 前に同期読み込み。`localStorage` 同期SoT・`chrome.storage.local.kstTheme` 正本。
+  - CSS: `:root`=ライト(T2琥珀)、`:root[data-theme="dark"]`=ダーク(T3)、`@media (prefers-color-scheme: dark){:root:not([data-theme])}`=auto時のみ。明示時のみ `style.colorScheme`。
+  - チップ化は checkbox 維持・見た目だけ（`<button>`置換しない）。既存ID・`els.*.checked`・abort差し替えを温存。`render()` はコントロール非再生成。
+  - 除外の照会対象外は `fullTargets`/`simpleTargets` で `!excluded` を無条件（「除外を隠す」表示フィルタと独立）。
+- 完成条件:
+  - 除外: 除外ボタンで除外・解除し薄く表示。両一括モードで照会されない。「除外を隠す」チップで表示切替。
+  - テーマ: ライト/ダーク/自動を切替・永続。初期FOUC無し。auto が OS 追従。popup も追従。
+  - UI: 2段ツールバー・チップのオン/オフ表示・セール中フィルタ・カード左ボーダー/割引バッジ右上。
+  - ソート: 一括照会中に数件ごと再ソート。中止が機能。
+  - 回帰: verify 3本 pass。
+- 変更内容（commit）:
+  - `1a84081` 除外フラグ / `33913aa` テーマ切替（theme-init.js 新規） / `3ad3c6a` UI刷新 / `1d244b5` リアルタイム再ソート
+- セルフ verify: `verify-kindle-library` / `verify-catalog-probe` / `verify-series-card` 全 pass（HEAD `1d244b5`）。`build-dev.ps1 -Target all` 同期済み。`options.css`/`popup.css` の explicit-dark と media-dark の変数 25個完全一致を確認（auto-dark フォールバック漏れなし）。
+- 実動確認: UI 挙動は verify 非カバー。実ブラウザ目視は user 確認待ち（agent からは未実施）。
+- レビュー観点: チップ化後の abort（中止）動作 / 除外の両一括スキップ / FOUC無し・auto OS追従・popup追従。
+- 並行作業（ユーザー裁定済み: 同ブランチ併走）: 別セッションが同ブランチに reconcileCatalog（`b1e2e8b`/`8cc3d67` docs, `d6f6cff` feat: series-card.js +27, verify-catalog-probe.mjs +53）を commit。追加のみで Claude Code の変更領域と非重複。個別 add でコミット混線なし。
+- 未解決: UI 実動確認の結果待ち。指摘あれば Codex（thread `019e820d-93ef-7692-b6f4-b5c6dd24a908`）で修正。
+- 次アクション: user が `chrome://extensions/` で `dist/dev/chrome` を再読込し、spec 完成条件チェックリストを目視確認。
+
 ## 2026-05-31 23:56 追記（続刊割引のみ表示・サイドパネル化 — Codex 作成）
 
 - 対象: `feature/storage-lite-and-scan-modes`
