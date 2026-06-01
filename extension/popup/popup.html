@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Kindle Series Sale Tracker</title>
+    <script src="../shared/theme-init.js"></script>
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
@@ -13,15 +14,28 @@
         <p id="summary">未スキャン</p>
       </header>
 
-      <section class="toolbar" aria-label="操作">
-        <button id="openLibrary" type="button">Kindle一覧を開く</button>
-        <button id="scanPage" type="button">このページをスキャン</button>
+      <section class="toolbar toolbar-scan" aria-label="スキャン">
+        <button id="scanFull" type="button">全件取得</button>
+        <button id="scanSimple" type="button" title="前回以降の新着だけを高速に取り込みます">簡易更新</button>
+      </section>
+
+      <section class="toolbar toolbar-nav" aria-label="ナビゲーション">
+        <button id="openLibrary" type="button">Kindle一覧</button>
+        <button id="openFullPage" type="button">専用ページ</button>
         <button id="exportCsv" type="button">CSV</button>
         <button id="exportJson" type="button">JSON</button>
       </section>
 
-      <section class="toolbar" aria-label="一覧">
-        <button id="openFullPage" type="button">全シリーズを専用ページで開く</button>
+      <section class="toolbar toolbar-sort" aria-label="並び替え">
+        <select id="popupSort" aria-label="並び替え">
+          <option value="priority">優先度順</option>
+          <option value="discount">割引率順</option>
+        </select>
+      </section>
+
+      <section class="toolbar toolbar-bulk" aria-label="続刊確認">
+        <button id="checkVisible" type="button">一括再確認</button>
+        <button id="checkSimple" type="button">新刊チェック</button>
       </section>
 
       <p id="status" class="status" role="status"></p>
@@ -33,6 +47,8 @@
     </main>
 
     <script src="../shared/kindle-library.js"></script>
+    <script src="../shared/catalog-probe.js"></script>
+    <script src="../shared/series-card.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

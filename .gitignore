@@ -1,5 +1,7 @@
 dist/
 *.zip
+repro-tmp.mjs
+.codex/
 
 .DS_Store
 Thumbs.db

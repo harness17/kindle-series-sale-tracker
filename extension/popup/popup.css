@@ -1,15 +1,99 @@
 :root {
-  color-scheme: light;
+  color-scheme: light dark;
+  --fg: #2f2518;
+  --muted: #746653;
+  --subtle: #5d5143;
+  --line: #e3d6c4;
+  --line-strong: #cdbb9f;
+  --accent: #b7791f;
+  --accent-strong: #8a4f00;
+  --accent-soft: #fff3cd;
+  --accent-hover: #fff7ed;
+  --warn: #b42318;
+  --bg: #fffaf2;
+  --card: #fffdf8;
+  --control-bg: #fff;
+  --badge-bg: #f1e7d7;
+  --badge-fg: #3a2a16;
+  --badge-info-bg: #eef4ed;
+  --badge-info-fg: #23553a;
+  --badge-next-bg: #e7f7f1;
+  --badge-next-fg: #066;
+  --badge-missing-bg: #fdecea;
+  --badge-completed-bg: #ecebff;
+  --badge-completed-fg: #44d;
+  --priority-border: #f0c36d;
+  --link: #075985;
+  --thumb-bg: #f1e7d7;
   font-family: Arial, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
-  color: #17202a;
-  background: #f7f4ee;
+  color: var(--fg);
+  background: var(--bg);
+}
+
+:root[data-theme="dark"] {
+  --fg: #f3efe7;
+  --muted: #b9ad9f;
+  --subtle: #c8bbae;
+  --line: #3b3228;
+  --line-strong: #5a4a3a;
+  --accent: #f6ad55;
+  --accent-strong: #ffd7a3;
+  --accent-soft: #3a2813;
+  --accent-hover: #2a2119;
+  --warn: #ff8a80;
+  --bg: #151210;
+  --card: #201a16;
+  --control-bg: #261f1a;
+  --badge-bg: #33291f;
+  --badge-fg: #f0e2d0;
+  --badge-info-bg: #243323;
+  --badge-info-fg: #b9e6c5;
+  --badge-next-bg: #14362f;
+  --badge-next-fg: #9fe8d0;
+  --badge-missing-bg: #4a211f;
+  --badge-completed-bg: #2e2b54;
+  --badge-completed-fg: #c9c4ff;
+  --priority-border: #d69a45;
+  --link: #7dd3fc;
+  --thumb-bg: #2c251f;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --fg: #f3efe7;
+    --muted: #b9ad9f;
+    --subtle: #c8bbae;
+    --line: #3b3228;
+    --line-strong: #5a4a3a;
+    --accent: #f6ad55;
+    --accent-strong: #ffd7a3;
+    --accent-soft: #3a2813;
+    --accent-hover: #2a2119;
+    --warn: #ff8a80;
+    --bg: #151210;
+    --card: #201a16;
+    --control-bg: #261f1a;
+    --badge-bg: #33291f;
+    --badge-fg: #f0e2d0;
+    --badge-info-bg: #243323;
+    --badge-info-fg: #b9e6c5;
+    --badge-next-bg: #14362f;
+    --badge-next-fg: #9fe8d0;
+    --badge-missing-bg: #4a211f;
+    --badge-completed-bg: #2e2b54;
+    --badge-completed-fg: #c9c4ff;
+    --priority-border: #d69a45;
+    --link: #7dd3fc;
+    --thumb-bg: #2c251f;
+  }
 }
 
 body {
-  width: 420px;
-  max-width: 420px;
+  width: 100%;
+  min-width: 300px;
   margin: 0;
-  background: #f7f4ee;
+  background: var(--bg);
+  color: var(--fg);
 }
 
 .app {
@@ -38,60 +122,76 @@ h1 {
 h2 {
   margin: 14px 0 8px;
   font-size: 13px;
-  color: #4d5a66;
+  color: var(--subtle);
 }
 
 #summary {
-  color: #4d5a66;
+  color: var(--subtle);
   font-size: 12px;
   white-space: nowrap;
 }
 
 .toolbar {
   display: grid;
-  grid-template-columns: 1fr 1fr 64px 64px;
   gap: 8px;
 }
 
-button {
+.toolbar-scan {
+  grid-template-columns: 1fr 1fr;
+}
+
+.toolbar-nav {
+  grid-template-columns: 1fr 1fr 64px 64px;
+}
+
+.toolbar-sort {
+  grid-template-columns: 1fr;
+  margin-top: 8px;
+}
+
+.toolbar-bulk {
+  grid-template-columns: 1fr 1fr;
+  margin-top: 8px;
+}
+
+button,
+select {
   min-height: 34px;
-  border: 1px solid #b8c2cc;
+  border: 1px solid var(--line-strong);
   border-radius: 6px;
-  background: #ffffff;
-  color: #17202a;
+  background: var(--control-bg);
+  color: var(--fg);
   font-size: 12px;
   cursor: pointer;
 }
 
 button:hover {
-  background: #f0f6ff;
-  border-color: #7aa7d9;
+  background: var(--accent-hover);
+  border-color: var(--accent);
 }
 
 .status {
   min-height: 18px;
   margin-top: 10px;
-  color: #7a4b00;
+  color: var(--accent-strong);
   font-size: 12px;
 }
 
 .series-list {
   display: grid;
   gap: 8px;
-  max-height: 420px;
-  overflow: auto;
 }
 
 .empty,
 .series-item {
-  border: 1px solid #d4d8dd;
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--card);
   padding: 10px;
 }
 
 .empty {
-  color: #66717c;
+  color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -104,24 +204,124 @@ button:hover {
   margin-bottom: 4px;
 }
 
+.title-badges {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
 .series-title strong {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 13px;
   line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .badge {
   flex: 0 0 auto;
   border-radius: 999px;
-  background: #eef4ed;
-  color: #23553a;
+  background: var(--badge-info-bg);
+  color: var(--badge-info-fg);
   padding: 2px 8px;
   font-size: 11px;
 }
 
+.badge.priority-badge {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.badge.sale {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.badge.next {
+  background: var(--badge-next-bg);
+  color: var(--badge-next-fg);
+}
+
+.badge.latest-date,
+.badge.price {
+  background: var(--badge-info-bg);
+  color: var(--badge-info-fg);
+}
+
+.badge.missing {
+  background: var(--badge-missing-bg);
+  color: var(--warn);
+}
+
+.badge.recheck {
+  background: var(--badge-missing-bg);
+  color: var(--warn);
+  font-weight: 700;
+}
+
+.badge.completed {
+  background: var(--badge-completed-bg);
+  color: var(--badge-completed-fg);
+}
+
+.series-item.priority {
+  border-color: var(--priority-border);
+}
+
 .series-meta {
-  color: #5d6873;
+  color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
+}
+
+.catalog-status {
+  margin-top: 4px;
+  color: var(--subtle);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.status-block {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.catalog-status a {
+  color: var(--link);
+  text-decoration: none;
+}
+
+.catalog-status a:hover {
+  text-decoration: underline;
+}
+
+.series-body {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.series-body > div {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.series-meta,
+.catalog-status {
+  overflow-wrap: anywhere;
+}
+
+.thumbnail {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 60px;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--thumb-bg);
 }
 
 .series-actions {
@@ -131,7 +331,7 @@ button:hover {
 }
 
 .series-actions a {
-  color: #075985;
+  color: var(--link);
   font-size: 12px;
   text-decoration: none;
 }

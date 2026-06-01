@@ -1,0 +1,183 @@
+## 2026-06-01 所持更新時の続刊情報リコンサイル（Claude Code 作成）
+
+- 対象: `feature/storage-lite-and-scan-modes`
+- 作成者: Claude Code（subagent-driven development、各タスク spec+quality 二段レビュー）
+- 主題: 続刊購入→簡易更新後に、古い続刊情報（has-next）が新 `highestVolume` に対して**通信なしで表示時に再評価**され、所持済みの巻が続刊として残らないようにした。
+- 設計/計画: `docs/superpowers/specs/2026-06-01-catalog-reconcile-on-ownership-update-design.md` / `docs/superpowers/plans/2026-06-01-catalog-reconcile-on-ownership-update.md`
+- 触った範囲: `extension/shared/series-card.js`（中核）, `extension/options/options.js`, `extension/popup/popup.js`, `extension/options/options.css`, `extension/popup/popup.css`, `verify-catalog-probe.mjs`
+- 触っていない範囲: `shared/kindle-library.js`・`catalog-probe.js` のロジック、`manifests/*`、`content/`・`background/`、theme/exclude/UI 系（並行セッションの領域）、個人の Kindle 蔵書データ
+- Current Design Line（変えてはいけない前提）:
+  - 再評価は純関数 `card.reconcileCatalog(cached, highestVolume)`。**書き戻さず表示時に導出**（cache 生データの latestVolume 等を温存）。トリガー不要＝開くたび最新 highestVolume で再判定。
+  - 分岐: `highestVolume<nextVolume`→変化なし／`>=latestVolume`→`no-next` 降格（`reconciled:'owned-to-latest'`）／その間→`{stale:true}`（`status:'has-next'` 維持・要再確認）／latestVolume 欠落は nextVolume 相当（安全側で降格）。
+  - cache への**書き込み**は生のまま（checkNext/runBulkProbe）。reconcile は読み取り経路のみ。
+  - 完結ボタン disable とハンドラガードは**同条件**（reconcile 済み `status==='has-next'`）。stale も has-next 維持なので完結禁止のまま（意図通り）。一方 simpleTargets（新刊チェック簡易）は `card.isConfirmedHasNext`（`has-next && !stale`）で**確定 has-next のみ除外**＝stale・降格 no-next・未照会は含める（この非対称は仕様）。
+  - options は `catalogFor(s)` ヘルパーで都度 reconcile、popup は `getLastScan` で1回 reconcile して下流共有。
+- 完成条件:
+  - 所持済みの next 巻が続刊あり表示として残らない（降格 or 要再確認）。
+  - stale では購入オファー（価格/割引/サムネ/続刊リンク）非表示・「要再確認」バッジ＋最新巻表示。
+  - 要再確認/確定 has-next は完結不可、降格 no-next は完結可。
+  - 新刊チェック（簡易）に stale・降格 no-next・未照会を含む。
+  - 回帰: verify 全 pass。
+- 変更内容（commit）:
+  - `d6f6cff` reconcileCatalog/isConfirmedHasNext + テスト7件 / `a1eeb97` stale 表示・オファー抑制 / `a050c82` options reconcile 集約 / `6b10747` セールフィルタも reconcile 経由 / `c87dae7` popup reconcile / `d69cfa8` 要再確認バッジ CSS
+- セルフ verify: `verify-kindle-library`(49) / `verify-catalog-probe`(29、reconcile 7件含む) 全 pass。`build-dev.ps1 -Target all` 同期済み（chrome/firefox）。
+- 実動確認: **未実施**。Amazon ログイン必須の Kindle 蔵書ページは agent-browser/playwright で取得不可のため。ロジックは Node 単体テストで全分岐カバー済みだが、DOM 描画（要再確認バッジ・ボタン活性）と所持更新→再評価の一連は user の実機目視が必要。
+- レビュー観点: stale の完結禁止が UI/ハンドラ両方で効くか / 簡易チェックに stale が入るか / 降格 no-next が「続刊なし」表示かつ完結可になるか / 既存の has-next 正常表示が壊れていないか。
+- 並行作業（ユーザー裁定済み: 同ブランチ併走）: 別セッションが theme/exclude/UI刷新/リアルタイムソート（`33913aa`/`3ad3c6a`/`1d244b5`/`5df6816` 等）を同ブランチに commit。線形履歴・個別 add でコミット混線なし。`options.js`/`options.css` は両セッションが触るが、reconcile 変更は cache 読み取り経路に限定し UI 変更と非重複。
+- 次アクション: user が `chrome://extensions/` で `dist/dev/chrome` を再読込し、続刊あり→購入→簡易更新→専用ページ更新の一連で「要再確認/続刊なし」へ変化するか目視確認。
+
+## 2026-06-01 除外フラグ・テーマ切替・UI刷新・リアルタイムソート（Claude Code 作成）
+
+- 対象: `feature/storage-lite-and-scan-modes`
+- 作成者: Claude Code（実装本体は Codex を MCP 経由で駆動、レビュー・commit は Claude Code）
+- 主題: 専用ページ(options)に除外フラグ／テーマ切替（ライト・ダーク・OS追従）／UI刷新（2段ツールバー・チップ・カード強調）／一括照会中の数件ごとリアルタイム再ソートを追加。popup はテーマ追従のみ。
+- 設計: `docs/superpowers/specs/2026-06-01-exclude-theme-ui-realtime-sort-design.md` / 計画 `docs/plans/2026-06-01-exclude-theme-ui-realtime-sort.md`
+- 触ってよい範囲: `extension/shared/theme-init.js`(新規), `extension/options/{options.html,options.css,options.js}`, `extension/popup/{popup.html,popup.css,popup.js}`
+- 触ってはいけない範囲: `shared/kindle-library.js`・`catalog-probe.js` のロジック、`manifests/*`、個人の Kindle 蔵書データ、並行 reconcile 作業のファイル
+- Current Design Line（変えてはいけない前提）:
+  - FOUC対策は MV3 CSP（`script-src 'self'`）でインラインscript不可 → 外部 `theme-init.js` を head で stylesheet 前に同期読み込み。`localStorage` 同期SoT・`chrome.storage.local.kstTheme` 正本。
+  - CSS: `:root`=ライト(T2琥珀)、`:root[data-theme="dark"]`=ダーク(T3)、`@media (prefers-color-scheme: dark){:root:not([data-theme])}`=auto時のみ。明示時のみ `style.colorScheme`。
+  - チップ化は checkbox 維持・見た目だけ（`<button>`置換しない）。既存ID・`els.*.checked`・abort差し替えを温存。`render()` はコントロール非再生成。
+  - 除外の照会対象外は `fullTargets`/`simpleTargets` で `!excluded` を無条件（「除外を隠す」表示フィルタと独立）。
+- 完成条件:
+  - 除外: 除外ボタンで除外・解除し薄く表示。両一括モードで照会されない。「除外を隠す」チップで表示切替。
+  - テーマ: ライト/ダーク/自動を切替・永続。初期FOUC無し。auto が OS 追従。popup も追従。
+  - UI: 2段ツールバー・チップのオン/オフ表示・セール中フィルタ・カード左ボーダー/割引バッジ右上。
+  - ソート: 一括照会中に数件ごと再ソート。中止が機能。
+  - 回帰: verify 3本 pass。
+- 変更内容（commit）:
+  - `1a84081` 除外フラグ / `33913aa` テーマ切替（theme-init.js 新規） / `3ad3c6a` UI刷新 / `1d244b5` リアルタイム再ソート
+- セルフ verify: `verify-kindle-library` / `verify-catalog-probe` / `verify-series-card` 全 pass（HEAD `1d244b5`）。`build-dev.ps1 -Target all` 同期済み。`options.css`/`popup.css` の explicit-dark と media-dark の変数 25個完全一致を確認（auto-dark フォールバック漏れなし）。
+- 実動確認: UI 挙動は verify 非カバー。実ブラウザ目視は user 確認待ち（agent からは未実施）。
+- レビュー観点: チップ化後の abort（中止）動作 / 除外の両一括スキップ / FOUC無し・auto OS追従・popup追従。
+- 並行作業（ユーザー裁定済み: 同ブランチ併走）: 別セッションが同ブランチに reconcileCatalog（`b1e2e8b`/`8cc3d67` docs, `d6f6cff` feat: series-card.js +27, verify-catalog-probe.mjs +53）を commit。追加のみで Claude Code の変更領域と非重複。個別 add でコミット混線なし。
+- 未解決: UI 実動確認の結果待ち。指摘あれば Codex（thread `019e820d-93ef-7692-b6f4-b5c6dd24a908`）で修正。
+- 次アクション: user が `chrome://extensions/` で `dist/dev/chrome` を再読込し、spec 完成条件チェックリストを目視確認。
+
+## 2026-05-31 23:56 追記（続刊割引のみ表示・サイドパネル化 — Codex 作成）
+
+- 対象: `feature/storage-lite-and-scan-modes`
+- 作成者: Codex
+- 主題: 実機フィードバック改訂に従い、価格/割引表示を続刊だけに限定し、Chrome は sidePanel、Firefox は sidebar_action に切り替えた。
+- 触ってよい範囲: `extension/shared/series-card.js`, `verify-series-card.mjs`, `manifests/chrome.json`, `manifests/firefox.json`, `extension/background/background.js`, `extension/popup/popup.css`, 改訂済み設計 doc。
+- 触ってはいけない範囲: host_permissions、manifest_version、content_scripts matches、popup.js の message/tabs query ロジック、個人の Kindle 蔵書データ。
+- 完成条件:
+  - no-next/unknown/null では `resolvePrimaryOffer` が null を返し、価格/割引と最新刊バッジを出さない。
+  - has-next では next オファーだけを価格/割引ソート・表示に使い、latest は next と別巻の補足だけに出す。
+  - Chrome manifest は sidePanel 権限、side_panel、background SW を持ち、action default_popup を持たない。
+  - Firefox manifest は sidebar_action を持ち、action popup と background SW を持たない。
+  - popup CSS は固定 420px 幅ではなく可変幅。
+- 変更内容:
+  - `resolvePrimaryOffer` を `status === 'has-next'` 限定に変更。
+  - `renderStatusBlock` の latest バッジ条件を has-next かつ latestVolume != nextVolume に限定。
+  - `verify-series-card.mjs` の no-next 期待値と `discountValue(noNext)` を改訂。
+  - `extension/background/background.js` を追加し、`chrome.sidePanel` 存在時だけ `openPanelOnActionClick` を設定。
+  - Chrome/Firefox manifest を side panel/sidebar 用に変更。
+  - `popup.css` の body 固定幅を `width: 100%; min-width: 300px` に変更。
+- セルフ verify:
+  - `node .\verify-kindle-library.mjs` 成功。
+  - `node .\verify-catalog-probe.mjs` 成功。
+  - `node .\verify-series-card.mjs` 成功。
+  - `node --check extension\popup\popup.js` 成功。
+  - `node --check extension\background\background.js` 成功。
+  - `node -e "..."` で両 manifest の JSON parse 成功。
+  - `.\scripts\build-dev.ps1 -Target all` 成功。`dist/dev/chrome` と `dist/dev/firefox` に反映済み。
+  - `git diff --check` 成功（CRLF warning のみ）。
+- 実動確認: 実ブラウザでの side panel/sidebar 起動確認は未実施。dev build は更新済み。
+- レビュー観点:
+  - no-next で所有済み最新刊の価格/割引が表示されないこと。
+  - Chrome の action click で side panel が開くこと。
+  - Firefox の sidebar_action が想定どおり表示されること。
+- 未解決:
+  - 実機での side panel/sidebar 表示確認。
+  - この Codex セッションでは `.git/index.lock` 作成が Permission denied になり、`git add` / `git commit` が未実行。
+- 次アクション:
+  - `.git` 書き込み権限がある環境で、個別ファイル指定の stage と日本語 commit を作成する。
+
+## 2026-05-31 23:36 追記（カード表示統合・割引率ソート・一括照会2種 — Codex 作成）
+
+- 対象: `feature/storage-lite-and-scan-modes`
+- 作成者: Codex
+- 主題: 設計 `docs/superpowers/specs/2026-05-31-card-consolidation-discount-sort-bulk-recheck-design.md` に沿って、カード状態表示の shared 化、割引率ソート、一括照会2種を実装した。
+- 触ってよい範囲: `extension/shared/catalog-probe.js`, `extension/shared/series-card.js`, `extension/options/*`, `extension/popup/*`, `verify-catalog-probe.mjs`, `verify-series-card.mjs`, 対象 docs。
+- 触ってはいけない範囲: manifest 権限、content script、個人の Kindle 蔵書データ、cookie、実購入 URL、`dist/` の stage。
+- 完成条件:
+  - popup/options の状態表示が `renderStatusBlock` へ統合され、割引→価格→続刊状態→最新刊の順で表示される。
+  - `detectNextVolume` の `has-next` が next 系価格/割引/発売日/サムネイルを返す。
+  - options/popup 両方で割引率ソートと、一括再確認/新刊チェックの2ボタンが動く。
+  - `catalog-probe.js` / `kindle-library.js` はロード時に fetch/DOMParser/window を使わない。
+  - manifest は変更しない。
+- 変更内容:
+  - `extension/shared/series-card.js` を UMD で追加し、検索URL、dash fallback、range表示、主オファー解決、割引値、probe、状態ブロック描画を集約。
+  - options/popup から重複 probe/描画ロジックを撤去し、shared モジュールを利用するよう変更。
+  - `verify-catalog-probe.mjs` に next 系オファー捕捉確認を追加し、`verify-series-card.mjs` を追加。
+  - `docs/plans/2026-05-31-card-consolidation-discount-sort-bulk-recheck.md` のチェックリストを完了状態へ更新。
+- セルフ verify:
+  - `node .\verify-kindle-library.mjs` 成功。
+  - `node .\verify-catalog-probe.mjs` 成功。
+  - `node .\verify-series-card.mjs` 成功。
+  - `.\scripts\build-dev.ps1 -Target all` 成功。`dist/dev/chrome` と `dist/dev/firefox` に反映済み。
+  - `git diff --check` 成功（CRLF warning のみ）。
+- 実動確認: Amazon ログインと拡張コンテキストが必要なため実サイト fetch は未実施。Node verify と dev build で静的・純粋ロジックを確認。
+- レビュー観点:
+  - 旧 `has-next` キャッシュは next 系フィールド無しのため割引ソート末尾になり、一括再確認で解消する設計どおりか。
+  - 一括照会2種の対象フィルタが full=表示中全件（完結除外）、simple=`has-next` 以外（完結除外）になっているか。
+  - popup/options の CSS は共通化せず、shared は DOM 構造と class 名だけを提供している。
+- 未解決:
+  - 実 Amazon 検索 HTML fixture による `parseSearchResultsFromDoc` の追加検証は未実施。
+  - この Codex セッションでは `.git/index.lock` 作成と `.git` 直下のテストファイル作成が Permission denied になり、`git add` / `git commit` が未実行。
+- 次アクション:
+  - `.git` 書き込み権限がある環境で、個別ファイル指定の `git add` と日本語 commit を実行する。
+
+## 2026-05-31 19:15 追記（dev build自動反映ルール — Codex 作成）
+
+- 対象: `H:\ClaudeCode\Browser-Extensions\kindle-series-sale-tracker`
+- 作成者: Codex
+- 主題: 今後 `extension/` または `manifests/` を変更したら、最終応答前に `dist/dev/chrome` と `dist/dev/firefox` へ反映するルールをharnessへ登録した。
+- 触ってよい範囲: `AGENTS.md`, `.claude/rules/project-collaboration-profile.md`
+- 触ってはいけない範囲: 既存の未コミット実装修正や未追跡ローカル設定を巻き戻さない。
+- 完成条件:
+  - Codex が読む `AGENTS.md` に `.\scripts\build-dev.ps1 -Target all` の実行条件がある。
+  - ClaudeCode が読む project profile に同じ実行条件がある。
+  - 今回時点でも `dist/dev/chrome` と `dist/dev/firefox` が再生成済み。
+- 変更内容:
+  - `AGENTS.md` の検証コマンドへ `.\scripts\build-dev.ps1 -Target all` を追加。
+  - `.claude/rules/project-collaboration-profile.md` に、`extension/` または `manifests/` 変更後はdev buildを完了条件に含めるルールを追加。
+- セルフ verify: `.\scripts\build-dev.ps1 -Target all` 成功。
+- 実動確認: `rg` で `AGENTS.md` と `.claude/rules/project-collaboration-profile.md` の登録文言を確認。
+- レビュー観点:
+  - 常駐ファイル監視hookではなく、Codex/ClaudeCodeが読むharness ruleとして登録している。
+- 未解決:
+  - OS常駐watcherやgit hookが必要なら別途ユーザー確認が必要。
+- 次アクション:
+  - 今後のコード変更では、verifyまたは最終確認時に `.\scripts\build-dev.ps1 -Target all` を実行する。
+
+## 2026-05-31 18:48 追記（Kindle続刊判定の版分割照合修正 — Codex 作成）
+
+- 対象: `H:\ClaudeCode\Browser-Extensions\kindle-series-sale-tracker`
+- 作成者: Codex
+- 主題: `うちの師匠はしっぽがない` の通常版/電子限定特装版が続刊なしになる問題を、続刊照合へ装飾なし `seriesKey` を渡すことで修正した。
+- 触ってよい範囲: `extension/options/options.js`, `extension/shared/catalog-probe.js`, `extension/shared/kindle-library.js`, `verify-catalog-probe.mjs`, `verify-kindle-library.mjs`
+- 触ってはいけない範囲: 既存の未追跡 `.claude/`, `.codex/`, `.mcp.json`, `CLAUDE.md`, `repro-tmp.mjs` と、Codexが今回確認だけした既存差分は勝手に巻き戻さない。
+- 完成条件:
+  - 通常版 `うちの師匠はしっぽがない（アフタヌーンコミックス）` が通常版13巻を `has-next` と判定する。
+  - 電子限定特装版 `うちの師匠はしっぽがない（電子限定特装版/アフタヌーンコミックス）` が電子限定特装版13巻を `has-next` と判定する。
+  - 既存の別レーベル新装版、単話版、スピンオフ除外の回帰を壊さない。
+  - Amazon検索fetch失敗や空結果は従来どおり `unknown` / `no-next` に留め、raw例外をUIへ出さない。
+- 変更内容:
+  - `extension/options/options.js` の `detectNextVolume` 呼び出しへ `seriesKey: s.seriesKey` を追加。
+  - `verify-catalog-probe.mjs` に通常版/電子限定特装版それぞれの13巻検出回帰テストを追加。
+  - 既にClaudeCode側で入っていた版分割・`seriesKey`保持方針は維持。
+- セルフ verify:
+  - `node .\verify-catalog-probe.mjs` 成功。
+  - `node .\verify-kindle-library.mjs` 成功。
+  - `.\scripts\build-dev.ps1 -Target all` 成功。`dist/dev/chrome` と `dist/dev/firefox` に反映済み。
+  - `.\scripts\package-release.ps1 -Target all` 成功。Chrome/Firefox zip を再生成。
+- 実動確認: Amazonログインが必要なため実サイトfetchは未実施。今回の判定ロジックはfixture相当の単体テストで確認。
+- レビュー観点:
+  - `options.js` の一括照会キャンセル変更は既存差分として存在しており、今回の主修正ではない。必要なら別途レビューする。
+  - `dist/` の生成物はパッケージ検証で更新されるが、stageするかはリリース方針次第。
+- 未解決:
+  - 実Amazon検索HTML fixtureで `parseSearchResultsFromDoc` を検証する作業は未実施。
+- 次アクション:
+  - 必要ならClaudeCode側で差分全体をレビューし、stage対象を明示してから commit 判断する。
