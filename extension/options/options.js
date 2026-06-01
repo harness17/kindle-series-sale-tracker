@@ -388,6 +388,7 @@
       els.summary.textContent = `${label}中… ${done}/${targets.length}`;
       cache[s.key] = { ...(await probeSeries(s)), checkedAt: Date.now() };
       if (done % 20 === 0) await chrome.storage.local.set({ [CACHE_KEY]: cache });
+      if (done % 5 === 0) render();
       if (done < targets.length) {
         await new Promise((resolve) => setTimeout(resolve, REQUEST_DELAY_MS));
       }
