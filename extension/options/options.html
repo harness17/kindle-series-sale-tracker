@@ -4,12 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Kindle シリーズ続刊トラッカー</title>
+    <script src="../shared/theme-init.js"></script>
     <link rel="stylesheet" href="options.css" />
   </head>
   <body>
     <header id="pageTop" class="topbar">
       <h1>Kindle シリーズ続刊トラッカー</h1>
       <div id="summary" class="summary">読み込み中…</div>
+      <label class="theme-control">テーマ
+        <select id="themeToggle">
+          <option value="auto">OSに合わせる</option>
+          <option value="light">ライト</option>
+          <option value="dark">ダーク</option>
+        </select>
+      </label>
     </header>
 
     <section class="controls">

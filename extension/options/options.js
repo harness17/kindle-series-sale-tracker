@@ -8,6 +8,7 @@
   const COMPLETED_KEY = 'kstCompletedSeries'; // 手動の完結フラグ { [seriesKey]: true }
   const PRIORITY_KEY = 'kstPrioritySeries'; // 優先表示フラグ { [seriesKey]: true }
   const EXCLUDED_KEY = 'kstExcludedSeries'; // 除外フラグ { [seriesKey]: true }
+  const THEME_KEY = 'kstTheme';
   const REQUEST_DELAY_MS = 350; // 一括照会の間隔（throttle/403 回避）
   let bulkAbort = false; // 一括照会のキャンセルフラグ
 
@@ -23,6 +24,7 @@
     checkSimple: document.getElementById('checkSimple'),
     clearCache: document.getElementById('clearCache'),
     clearScan: document.getElementById('clearScan'),
+    themeToggle: document.getElementById('themeToggle'),
     list: document.getElementById('list'),
     topLink: document.querySelector('.top-link'),
   };
@@ -36,6 +38,50 @@
 
   function iconLabel(icon, text) {
     return `${icon} ${text}`;
+  }
+
+  function normalizeTheme(value) {
+    return window.__KST_THEME__?.normalizeTheme(value)
+      || (['light', 'dark', 'auto'].includes(value) ? value : 'auto');
+  }
+
+  function applyThemeToDocument(value) {
+    if (window.__KST_THEME__?.applyThemeToDocument) {
+      return window.__KST_THEME__.applyThemeToDocument(value);
+    }
+    const theme = normalizeTheme(value);
+    if (theme === 'auto') {
+      delete document.documentElement.dataset.theme;
+      document.documentElement.style.colorScheme = '';
+    } else {
+      document.documentElement.dataset.theme = theme;
+      document.documentElement.style.colorScheme = theme;
+    }
+    return theme;
+  }
+
+  function setLocalTheme(value) {
+    try {
+      localStorage.setItem(THEME_KEY, value);
+    } catch (_) {
+      // localStorage が使えない環境でも chrome.storage.local を正本にする。
+    }
+  }
+
+  async function initTheme() {
+    const data = await chrome.storage.local.get([THEME_KEY]);
+    const theme = normalizeTheme(data[THEME_KEY]);
+    els.themeToggle.value = theme;
+    setLocalTheme(theme);
+    applyThemeToDocument(theme);
+  }
+
+  async function applyTheme(value) {
+    const theme = normalizeTheme(value);
+    setLocalTheme(theme);
+    await chrome.storage.local.set({ [THEME_KEY]: theme });
+    applyThemeToDocument(theme);
+    els.themeToggle.value = theme;
   }
 
   async function load() {
@@ -406,7 +452,9 @@
   els.checkSimple.addEventListener('click', startSimpleBulk);
   els.clearCache.addEventListener('click', clearCache);
   els.clearScan.addEventListener('click', clearScan);
+  els.themeToggle.addEventListener('change', () => applyTheme(els.themeToggle.value));
   if (els.topLink) els.topLink.addEventListener('click', scrollToTop);
 
+  initTheme();
   load();
 })();

@@ -7,6 +7,7 @@
   const CACHE_KEY = 'kstCatalogCache';
   const COMPLETED_KEY = 'kstCompletedSeries';
   const PRIORITY_KEY = 'kstPrioritySeries';
+  const THEME_KEY = 'kstTheme';
   const REQUEST_DELAY_MS = 350;
   const libraryUrl = 'https://www.amazon.co.jp/hz/mycd/digital-console/contentlist/booksAll/dateDsc/';
 
@@ -17,6 +18,41 @@
   const checkVisibleBtn = document.getElementById('checkVisible');
   const checkSimpleBtn = document.getElementById('checkSimple');
   let currentScan = null;
+
+  function normalizeTheme(value) {
+    return window.__KST_THEME__?.normalizeTheme(value)
+      || (['light', 'dark', 'auto'].includes(value) ? value : 'auto');
+  }
+
+  function applyThemeToDocument(value) {
+    if (window.__KST_THEME__?.applyThemeToDocument) {
+      return window.__KST_THEME__.applyThemeToDocument(value);
+    }
+    const theme = normalizeTheme(value);
+    if (theme === 'auto') {
+      delete document.documentElement.dataset.theme;
+      document.documentElement.style.colorScheme = '';
+    } else {
+      document.documentElement.dataset.theme = theme;
+      document.documentElement.style.colorScheme = theme;
+    }
+    return theme;
+  }
+
+  function setLocalTheme(value) {
+    try {
+      localStorage.setItem(THEME_KEY, value);
+    } catch (_) {
+      // localStorage が使えない環境でも chrome.storage.local を正本にする。
+    }
+  }
+
+  async function initTheme() {
+    const data = await chrome.storage.local.get([THEME_KEY]);
+    const theme = normalizeTheme(data[THEME_KEY]);
+    setLocalTheme(theme);
+    applyThemeToDocument(theme);
+  }
 
   function setStatus(message) {
     status.textContent = message || '';
@@ -349,5 +385,6 @@
   document.getElementById('exportCsv').addEventListener('click', () => exportBooks('csv'));
   document.getElementById('exportJson').addEventListener('click', () => exportBooks('json'));
 
+  initTheme();
   refresh();
 })();
