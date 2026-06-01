@@ -7,6 +7,7 @@ const {
   normalizePublicationDate,
 } = require('./extension/shared/catalog-probe.js');
 const { reconcileCatalog, isConfirmedHasNext } = require('./extension/shared/series-card.js');
+const { mergeScan, summarizeNormalizedBooks } = require('./extension/shared/kindle-library.js');
 
 const checks = [
   {
@@ -438,6 +439,54 @@ const checks = [
       isConfirmedHasNext({ status: 'has-next', stale: true }) === false &&
       isConfirmedHasNext({ status: 'no-next' }) === false &&
       isConfirmedHasNext(null) === false,
+  },
+  // --- integration: 簡易更新で highestVolume が上がると reconcile が状態遷移する（ユーザー報告フロー） ---
+  // 所持側（mergeScan→highestVolume 上昇）と続刊側（reconcileCatalog）の繋ぎ目を end-to-end で検証する。
+  {
+    name: 'integration: 7巻購入→簡易更新で highestVolume 6→7、latest=7 なら続刊なしへ降格',
+    ok: (() => {
+      const existing = [1, 2, 3, 4, 5, 6].map((v) => ({
+        asin: `a${v}`,
+        seriesKey: '鬼滅の刃',
+        volume: v,
+        imprint: '',
+        author: '',
+      }));
+      const before = summarizeNormalizedBooks(existing);
+      const key = before[0].key;
+      const merged = mergeScan(existing, [
+        { asin: 'a7', seriesKey: '鬼滅の刃', volume: 7, imprint: '', author: '' },
+      ]);
+      const after = merged.series.find((s) => s.key === key);
+      const cached = { status: 'has-next', nextVolume: 7, nextTitle: '鬼滅の刃 7', latestVolume: 7 };
+      const r = reconcileCatalog(cached, after.highestVolume);
+      return (
+        before[0].highestVolume === 6 &&
+        after.highestVolume === 7 &&
+        merged.added === 1 &&
+        r.status === 'no-next' &&
+        r.reconciled === 'owned-to-latest'
+      );
+    })(),
+  },
+  {
+    name: 'integration: 7巻購入→簡易更新後、latest=10 なら要再確認(stale)へ遷移',
+    ok: (() => {
+      const existing = [1, 2, 3, 4, 5, 6].map((v) => ({
+        asin: `b${v}`,
+        seriesKey: 'テストシリーズ',
+        volume: v,
+        imprint: '',
+        author: '',
+      }));
+      const merged = mergeScan(existing, [
+        { asin: 'b7', seriesKey: 'テストシリーズ', volume: 7, imprint: '', author: '' },
+      ]);
+      const after = merged.series[0];
+      const cached = { status: 'has-next', nextVolume: 7, latestVolume: 10 };
+      const r = reconcileCatalog(cached, after.highestVolume);
+      return after.highestVolume === 7 && r.stale === true && r.status === 'has-next';
+    })(),
   },
 ];
 
