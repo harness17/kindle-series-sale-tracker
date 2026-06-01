@@ -227,13 +227,6 @@
     priorityBtn.addEventListener('click', () => togglePriority(s));
     actions.appendChild(priorityBtn);
 
-    const excludeBtn = document.createElement('button');
-    excludeBtn.type = 'button';
-    excludeBtn.className = 'secondary exclude-btn';
-    excludeBtn.textContent = excluded[s.key] ? '除外解除' : '除外';
-    excludeBtn.addEventListener('click', () => toggleExcluded(s));
-    actions.appendChild(excludeBtn);
-
     const checkBtn = document.createElement('button');
     checkBtn.type = 'button';
     checkBtn.className = 'secondary';
@@ -253,6 +246,13 @@
     }
     completeBtn.addEventListener('click', () => toggleCompleted(s));
     actions.appendChild(completeBtn);
+
+    const excludeBtn = document.createElement('button');
+    excludeBtn.type = 'button';
+    excludeBtn.className = 'secondary exclude-btn';
+    excludeBtn.textContent = excluded[s.key] ? '除外解除' : '除外';
+    excludeBtn.addEventListener('click', () => toggleExcluded(s));
+    actions.appendChild(excludeBtn);
 
     const searchLink = document.createElement('a');
     searchLink.href = s.searchUrl;
