@@ -142,7 +142,7 @@
     }
     if (els.filterHideCompleted.checked && completed[s.key]) return false;
     if (els.filterExcluded.checked && excluded[s.key]) return false;
-    if (els.filterSale.checked && card.discountValue(cache[s.key]) <= 0) return false;
+    if (els.filterSale.checked && card.discountValue(catalogFor(s)) <= 0) return false;
     return true;
   }
 
