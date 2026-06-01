@@ -207,6 +207,10 @@ button:disabled {
   opacity: 0.6;
 }
 
+.series.excluded {
+  opacity: 0.6;
+}
+
 .series.priority {
   border-color: #f0c36d;
 }

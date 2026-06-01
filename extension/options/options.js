@@ -7,6 +7,7 @@
   const CACHE_KEY = 'kstCatalogCache';
   const COMPLETED_KEY = 'kstCompletedSeries'; // 手動の完結フラグ { [seriesKey]: true }
   const PRIORITY_KEY = 'kstPrioritySeries'; // 優先表示フラグ { [seriesKey]: true }
+  const EXCLUDED_KEY = 'kstExcludedSeries'; // 除外フラグ { [seriesKey]: true }
   const REQUEST_DELAY_MS = 350; // 一括照会の間隔（throttle/403 回避）
   let bulkAbort = false; // 一括照会のキャンセルフラグ
 
@@ -30,6 +31,7 @@
   let cache = {}; // seriesKey -> { status, nextVolume, nextTitle, nextUrl, checkedAt }
   let completed = {}; // seriesKey -> true（手動完結フラグ）
   let priority = {}; // seriesKey -> true（優先表示フラグ）
+  let excluded = {}; // seriesKey -> true（除外フラグ）
   let baseSummary = ''; // クリア後などに戻す件数表示
 
   function iconLabel(icon, text) {
@@ -37,11 +39,18 @@
   }
 
   async function load() {
-    const data = await chrome.storage.local.get([api.STORAGE_KEY, CACHE_KEY, COMPLETED_KEY, PRIORITY_KEY]);
+    const data = await chrome.storage.local.get([
+      api.STORAGE_KEY,
+      CACHE_KEY,
+      COMPLETED_KEY,
+      PRIORITY_KEY,
+      EXCLUDED_KEY,
+    ]);
     const scan = data[api.STORAGE_KEY];
     cache = data[CACHE_KEY] || {};
     completed = data[COMPLETED_KEY] || {};
     priority = data[PRIORITY_KEY] || {};
+    excluded = data[EXCLUDED_KEY] || {};
 
     if (!scan || (!Array.isArray(scan.series) && !Array.isArray(scan.items))) {
       series = [];
@@ -140,6 +149,7 @@
     row.className = 'series';
     if (completed[s.key]) row.classList.add('completed');
     if (priority[s.key]) row.classList.add('priority');
+    if (excluded[s.key]) row.classList.add('excluded');
     const cached = cache[s.key];
     const offer = card.resolvePrimaryOffer(cached);
     const thumbnailUrl = offer?.thumbnailUrl || cached?.latestThumbnailUrl || s.latestOwnedThumbnailUrl || '';
@@ -159,6 +169,13 @@
     priorityBtn.textContent = priority[s.key] ? iconLabel('☆', '優先解除') : iconLabel('★', '優先表示');
     priorityBtn.addEventListener('click', () => togglePriority(s));
     actions.appendChild(priorityBtn);
+
+    const excludeBtn = document.createElement('button');
+    excludeBtn.type = 'button';
+    excludeBtn.className = 'secondary exclude-btn';
+    excludeBtn.textContent = excluded[s.key] ? '除外解除' : '除外';
+    excludeBtn.addEventListener('click', () => toggleExcluded(s));
+    actions.appendChild(excludeBtn);
 
     const checkBtn = document.createElement('button');
     checkBtn.type = 'button';
@@ -244,6 +261,16 @@
     render();
   }
 
+  async function toggleExcluded(s) {
+    if (excluded[s.key]) {
+      delete excluded[s.key];
+    } else {
+      excluded[s.key] = true;
+    }
+    await chrome.storage.local.set({ [EXCLUDED_KEY]: excluded });
+    render();
+  }
+
   async function toggleCompleted(s) {
     // 続刊あり確定のシリーズは完結にできない（解除は許可）。
     if (!completed[s.key] && cache[s.key]?.status === 'has-next') return;
@@ -277,11 +304,11 @@
   }
 
   function fullTargets() {
-    return currentList().filter((s) => !completed[s.key]);
+    return currentList().filter((s) => !completed[s.key] && !excluded[s.key]);
   }
 
   function simpleTargets() {
-    return currentList().filter((s) => !completed[s.key] && cache[s.key]?.status !== 'has-next');
+    return currentList().filter((s) => !completed[s.key] && !excluded[s.key] && cache[s.key]?.status !== 'has-next');
   }
 
   async function runBulkProbe(targets, options) {
