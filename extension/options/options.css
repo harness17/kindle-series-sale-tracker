@@ -311,6 +311,12 @@ button:disabled {
   color: var(--warn);
 }
 
+.badge.recheck {
+  background: var(--badge-missing-bg);
+  color: var(--warn);
+  font-weight: 700;
+}
+
 .badge.next {
   background: var(--badge-next-bg);
   color: var(--badge-next-fg);

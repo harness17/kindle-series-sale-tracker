@@ -254,6 +254,12 @@ button:hover {
   color: var(--warn);
 }
 
+.badge.recheck {
+  background: var(--badge-missing-bg);
+  color: var(--warn);
+  font-weight: 700;
+}
+
 .badge.completed {
   background: var(--badge-completed-bg);
   color: var(--badge-completed-fg);
