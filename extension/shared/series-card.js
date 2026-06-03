@@ -113,8 +113,7 @@
       !cached.stale &&
       cached.completionCost !== null &&
       cached.completionFoundCount > 0 &&
-      cached.completionExpectedSpan > 1 &&
-      cached.completionFoundCount * 2 > cached.completionExpectedSpan
+      cached.completionExpectedSpan > 1
     ) {
       appendSpace(targetEl);
       const costStr = `￥${cached.completionCost.toLocaleString('ja-JP')}`;
