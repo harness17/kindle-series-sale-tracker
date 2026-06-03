@@ -81,6 +81,19 @@
     return Number.isFinite(price) && price >= 0 ? price : null;
   }
 
+  function parseYenPrices(text) {
+    const value = normalizeDigits(text);
+    const prices = [];
+    const patterns = [/[￥¥]\s*([\d,]+)/g, /([\d,]+)\s*円/g];
+    for (const pattern of patterns) {
+      for (const match of value.matchAll(pattern)) {
+        const price = Number(match[1].replace(/,/g, ''));
+        if (Number.isFinite(price) && price >= 0) prices.push(price);
+      }
+    }
+    return prices;
+  }
+
   function parseDiscountRate(text) {
     const value = normalizeDigits(text);
     const match = value.match(/(\d{1,3})\s*[％%]\s*(?:OFF|オフ|割引)?/i);
@@ -131,9 +144,41 @@
     return '';
   }
 
+  function queryTexts(node, selectors) {
+    const texts = [];
+    for (const selector of selectors) {
+      if (typeof node.querySelectorAll === 'function') {
+        node.querySelectorAll(selector).forEach((el) => {
+          if (el && el.textContent) texts.push(el.textContent);
+        });
+      } else {
+        const el = node.querySelector(selector);
+        if (el && el.textContent) texts.push(el.textContent);
+      }
+    }
+    return texts;
+  }
+
+  function selectCurrentPriceText(node, selectors) {
+    const domPrices = queryTexts(node, selectors)
+      .map((text) => parseYenPrice(text))
+      .filter((price) => price !== null);
+    const signalText = collectSignalText(node, { excludeTitles: true });
+    const hasKindleUnlimited = /Kindle\s*Unlimited|読み放題/i.test(signalText);
+    const prices = hasKindleUnlimited ? [...domPrices, ...parseYenPrices(signalText)] : domPrices;
+    if (prices.length === 0) return '';
+
+    let price = prices[0];
+    if (hasKindleUnlimited && price === 0) {
+      const purchasePrice = prices.find((candidate) => candidate > 0);
+      if (purchasePrice !== undefined) price = purchasePrice;
+    }
+    return yenText(price);
+  }
+
   function extractSearchResultOffer(node) {
     if (!node) return {};
-    const priceText = queryText(node, [
+    const priceText = selectCurrentPriceText(node, [
       '.a-price:not(.a-text-price):not(.wl-deal-price) .a-offscreen',
       '[data-a-color="price"] .a-price .a-offscreen',
       '.a-price .a-offscreen',
@@ -184,6 +229,8 @@
         : kdl.seriesKeyFromTitle(seriesTitle || '');
     let best = null;
     let latest = null;
+    // 未所有巻を巻番号でdedup。同一巻の複数版は最安価格を採用。
+    const unownedByVolume = new Map();
     for (const r of results) {
       const parsed = kdl.splitSeriesAndVolume(r.title || '');
       if (!Number.isFinite(parsed.volume)) continue;
@@ -216,7 +263,26 @@
           discountRate: r.discountRate || null,
         };
       }
+      const candidatePrice = parseYenPrice(r.priceText || '');
+      const existing = unownedByVolume.get(parsed.volume);
+      if (!existing || (candidatePrice !== null && (existing.price === null || candidatePrice < existing.price))) {
+        unownedByVolume.set(parsed.volume, { price: candidatePrice });
+      }
     }
+
+    let completionCost = 0;
+    let completionFoundCount = 0;
+    for (const entry of unownedByVolume.values()) {
+      if (entry.price !== null) {
+        completionCost += entry.price;
+        completionFoundCount++;
+      }
+    }
+    // 検索結果が不完全な場合は下限として扱う。latestVolume - highestVolume が期待スパン。
+    const completionExpectedSpan =
+      latest && Number.isFinite(latest.volume) && latest.volume > highestVolume
+        ? latest.volume - highestVolume
+        : unownedByVolume.size;
 
     if (best) {
       return {
@@ -237,6 +303,9 @@
         latestPriceText: latest?.priceText || '',
         latestListPriceText: latest?.listPriceText || '',
         latestDiscountRate: latest?.discountRate || null,
+        completionCost: completionFoundCount > 0 ? completionCost : null,
+        completionFoundCount,
+        completionExpectedSpan,
       };
     }
     return latest

@@ -94,6 +94,48 @@ const checks = [
     })(),
   },
   {
+    name: 'Kindle Unlimited の0円DOM表示より購入価格DOMを優先する',
+    ok: (() => {
+      const node = {
+        textContent: 'Kindle Unlimited ￥0 Kindle版 ￥748',
+        querySelector(selector) {
+          if (selector.includes('a-text-price') || selector.includes('a-text-strike')) return null;
+          if (selector.includes(':not') || selector.includes('data-a-color') || selector.includes('.a-price')) {
+            return { textContent: '￥0' };
+          }
+          return null;
+        },
+        querySelectorAll(selector) {
+          if (selector.includes('a-text-price') || selector.includes('a-text-strike')) return [];
+          return [{ textContent: '￥0' }, { textContent: '￥748' }];
+        },
+      };
+      const offer = extractSearchResultOffer(node);
+      return offer.priceText === '￥748' && offer.listPriceText === '' && offer.discountRate === null;
+    })(),
+  },
+  {
+    name: 'Kindle Unlimited の0円DOM表示よりカード本文内の購入価格を優先する',
+    ok: (() => {
+      const node = {
+        textContent: 'Kindle Unlimited ￥0 または ￥748 で購入',
+        querySelector(selector) {
+          if (selector.includes('a-text-price') || selector.includes('a-text-strike')) return null;
+          if (selector.includes(':not') || selector.includes('data-a-color') || selector.includes('.a-price')) {
+            return { textContent: '￥0' };
+          }
+          return null;
+        },
+        querySelectorAll(selector) {
+          if (selector.includes('a-text-price') || selector.includes('a-text-strike')) return [];
+          return [{ textContent: '￥0' }];
+        },
+      };
+      const offer = extractSearchResultOffer(node);
+      return offer.priceText === '￥748' && offer.listPriceText === '' && offer.discountRate === null;
+    })(),
+  },
+  {
     name: '商品名だけの%OFF表記は割引率として扱わない',
     ok: (() => {
       const node = {
@@ -386,6 +428,62 @@ const checks = [
         }
       );
       return r.status === 'has-next' && r.nextVolume === 13 && r.nextUrl === 'special13';
+    })(),
+  },
+  // --- completionCost: 完結コスト集計 ---
+  {
+    name: '完結コスト: 2巻分の価格を合算して返す（完全一致）',
+    ok: (() => {
+      const r = detectNextVolume(
+        [
+          { title: '鬼滅の刃 12', url: 'u12', priceText: '￥376' },
+          { title: '鬼滅の刃 13', url: 'u13', priceText: '￥418' },
+        ],
+        { seriesTitle: '鬼滅の刃', highestVolume: 11 }
+      );
+      return (
+        r.status === 'has-next' &&
+        r.completionCost === 794 &&
+        r.completionFoundCount === 2 &&
+        r.completionExpectedSpan === 2
+      );
+    })(),
+  },
+  {
+    name: '完結コスト: 同一巻の重複ASINは最安価格でdedup（二重計上しない）',
+    ok: (() => {
+      const r = detectNextVolume(
+        [
+          { title: '鬼滅の刃 12', url: 'u12a', priceText: '￥418' },
+          { title: '鬼滅の刃 12', url: 'u12b', priceText: '￥376' },
+          { title: '鬼滅の刃 13', url: 'u13', priceText: '￥418' },
+        ],
+        { seriesTitle: '鬼滅の刃', highestVolume: 11 }
+      );
+      return (
+        r.status === 'has-next' &&
+        r.completionCost === 794 &&
+        r.completionFoundCount === 2 &&
+        r.completionExpectedSpan === 2
+      );
+    })(),
+  },
+  {
+    name: '完結コスト: 価格不明巻があれば foundCount < expectedSpan で partial 判定',
+    ok: (() => {
+      const r = detectNextVolume(
+        [
+          { title: '鬼滅の刃 12', url: 'u12', priceText: '￥376' },
+          { title: '鬼滅の刃 13', url: 'u13', priceText: '' },
+        ],
+        { seriesTitle: '鬼滅の刃', highestVolume: 11 }
+      );
+      return (
+        r.status === 'has-next' &&
+        r.completionCost === 376 &&
+        r.completionFoundCount === 1 &&
+        r.completionExpectedSpan === 2
+      );
     })(),
   },
   // --- reconcileCatalog: 所持更新時の続刊情報リコンサイル ---

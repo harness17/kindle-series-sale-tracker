@@ -106,14 +106,37 @@
       const date = cached.latestReleaseDate ? ` ${cached.latestReleaseDate}` : '';
       appendBadge(targetEl, 'badge latest-date', `最新 ${cached.latestVolume}巻${date}`);
     }
+
+    if (
+      cached &&
+      cached.status === 'has-next' &&
+      !cached.stale &&
+      cached.completionCost !== null &&
+      cached.completionFoundCount > 0 &&
+      cached.completionExpectedSpan > 1 &&
+      cached.completionFoundCount * 2 > cached.completionExpectedSpan
+    ) {
+      appendSpace(targetEl);
+      const costStr = `￥${cached.completionCost.toLocaleString('ja-JP')}`;
+      const isPartial = cached.completionFoundCount < cached.completionExpectedSpan;
+      const label = isPartial
+        ? `完結コスト ${costStr}〜（既知${cached.completionFoundCount}巻分）`
+        : `完結コスト ${costStr}（${cached.completionFoundCount}巻）`;
+      appendBadge(targetEl, 'badge completion-cost', label);
+    }
+  }
+
+  async function fetchSearchResults(catalog, url) {
+    const res = await fetch(url, { credentials: 'include' });
+    if (!res.ok) return [];
+    const html = await res.text();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    return catalog.parseSearchResultsFromDoc(doc);
   }
 
   async function probeSeriesWithUrl(catalog, group, searchUrl, seriesKey) {
-    const res = await fetch(searchUrl, { credentials: 'include' });
-    if (!res.ok) return { status: 'unknown' };
-    const html = await res.text();
-    const doc = new DOMParser().parseFromString(html, 'text/html');
-    const results = catalog.parseSearchResultsFromDoc(doc);
+    const results = await fetchSearchResults(catalog, searchUrl);
+    if (results.length === 0) return { status: 'unknown' };
     return catalog.detectNextVolume(results, {
       seriesTitle: group.title,
       seriesKey,
@@ -125,7 +148,30 @@
   async function probeSeries(catalog, group) {
     if (!Number.isFinite(group.highestVolume)) return { status: 'unknown' };
     try {
-      const result = await probeSeriesWithUrl(catalog, group, group.searchUrl, group.seriesKey);
+      const primaryResults = await fetchSearchResults(catalog, group.searchUrl);
+      let result = catalog.detectNextVolume(primaryResults, {
+        seriesTitle: group.title,
+        seriesKey: group.seriesKey,
+        highestVolume: group.highestVolume,
+        ownedImprint: group.imprint,
+      });
+
+      if (result.status === 'has-next' && result.nextVolume > group.highestVolume + 3) {
+        try {
+          const gapUrl = seriesSearchUrl(`${group.seriesKey || group.title} ${group.highestVolume + 1}`, '');
+          const gapResults = await fetchSearchResults(catalog, gapUrl);
+          const mergedResult = catalog.detectNextVolume(primaryResults.concat(gapResults), {
+            seriesTitle: group.title,
+            seriesKey: group.seriesKey,
+            highestVolume: group.highestVolume,
+            ownedImprint: group.imprint,
+          });
+          if (mergedResult.status === 'has-next') result = mergedResult;
+        } catch (error) {
+          // Keep the primary result when the supplemental search fails.
+        }
+      }
+
       if (result.status === 'has-next') return result;
 
       const closedDashKey = withClosingDashSeriesKey(group.seriesKey || group.title);
