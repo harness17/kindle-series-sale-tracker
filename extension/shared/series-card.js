@@ -158,9 +158,20 @@
 
       if (result.status === 'has-next' && result.nextVolume > group.highestVolume + 3) {
         try {
+          const extraResults = [];
+          for (let page = 2; page <= 5; page += 1) {
+            try {
+              const pageUrl = group.searchUrl + '&page=' + page;
+              const pageResults = await fetchSearchResults(catalog, pageUrl);
+              extraResults.push(...pageResults);
+            } catch (error) {
+              // Skip failed pagination pages and keep using available results.
+            }
+          }
+
           const gapUrl = seriesSearchUrl(`${group.seriesKey || group.title} ${group.highestVolume + 1}`, '');
           const gapResults = await fetchSearchResults(catalog, gapUrl);
-          const mergedResult = catalog.detectNextVolume(primaryResults.concat(gapResults), {
+          const mergedResult = catalog.detectNextVolume(primaryResults.concat(extraResults).concat(gapResults), {
             seriesTitle: group.title,
             seriesKey: group.seriesKey,
             highestVolume: group.highestVolume,
