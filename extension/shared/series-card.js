@@ -116,11 +116,16 @@
       cached.completionExpectedSpan > 1
     ) {
       appendSpace(targetEl);
-      const costStr = `￥${cached.completionCost.toLocaleString('ja-JP')}`;
       const isPartial = cached.completionFoundCount < cached.completionExpectedSpan;
-      const label = isPartial
-        ? `完結コスト ${costStr}〜（既知${cached.completionFoundCount}巻分）`
-        : `完結コスト ${costStr}（${cached.completionFoundCount}巻）`;
+      let label;
+      if (isPartial) {
+        const estimated = Math.round(
+          (cached.completionCost / cached.completionFoundCount) * cached.completionExpectedSpan
+        );
+        label = `完結コスト 約￥${estimated.toLocaleString('ja-JP')}（推定）`;
+      } else {
+        label = `完結コスト ￥${cached.completionCost.toLocaleString('ja-JP')}（${cached.completionFoundCount}巻）`;
+      }
       appendBadge(targetEl, 'badge completion-cost', label);
     }
   }
