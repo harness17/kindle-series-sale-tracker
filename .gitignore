@@ -2,6 +2,8 @@ dist/
 *.zip
 repro-tmp.mjs
 .codex/
+.superpowers/
+CLAUDE_CODE_HANDOFF.md
 
 .DS_Store
 Thumbs.db
