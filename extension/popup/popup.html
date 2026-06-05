@@ -11,37 +11,41 @@
     <main class="app">
       <header class="header">
         <h1>Kindle Series</h1>
-        <p id="summary">未スキャン</p>
+        <p id="summary" data-i18n="unscanned">未スキャン</p>
+        <select id="langToggle" class="lang-toggle" aria-label="Language">
+          <option value="ja">日本語</option>
+          <option value="en">English</option>
+        </select>
       </header>
 
       <section class="toolbar toolbar-scan" aria-label="スキャン">
-        <button id="scanFull" type="button">全件取得</button>
-        <button id="scanSimple" type="button" title="前回以降の新着だけを高速に取り込みます">簡易更新</button>
+        <button id="scanFull" type="button" data-i18n="scanFull">全件取得</button>
+        <button id="scanSimple" type="button" data-i18n="scanSimple" data-i18n-title="simpleScanTitle">簡易更新</button>
       </section>
 
       <section class="toolbar toolbar-nav" aria-label="ナビゲーション">
-        <button id="openLibrary" type="button">Kindle一覧</button>
-        <button id="openFullPage" type="button">専用ページ</button>
+        <button id="openLibrary" type="button" data-i18n="openLibrary">Kindle一覧</button>
+        <button id="openFullPage" type="button" data-i18n="openFullPage">専用ページ</button>
         <button id="exportCsv" type="button">CSV</button>
         <button id="exportJson" type="button">JSON</button>
       </section>
 
       <section class="toolbar toolbar-sort" aria-label="並び替え">
         <select id="popupSort" aria-label="並び替え">
-          <option value="priority">優先度順</option>
-          <option value="discount">割引率順</option>
+          <option value="priority" data-i18n="sortPriority">優先度順</option>
+          <option value="discount" data-i18n="sortDiscount">割引率順</option>
         </select>
       </section>
 
       <section class="toolbar toolbar-bulk" aria-label="続刊確認">
-        <button id="checkVisible" type="button">一括再確認</button>
-        <button id="checkSimple" type="button">新刊チェック</button>
+        <button id="checkVisible" type="button" data-i18n="checkVisible">一括再確認</button>
+        <button id="checkSimple" type="button" data-i18n="checkSimpleBtn">新刊チェック</button>
       </section>
 
       <p id="status" class="status" role="status"></p>
 
       <section>
-        <h2>シリーズ候補</h2>
+        <h2 data-i18n="seriesCandidates">シリーズ候補</h2>
         <div id="seriesList" class="series-list"></div>
       </section>
     </main>
@@ -49,6 +53,7 @@
     <script src="../shared/kindle-library.js"></script>
     <script src="../shared/catalog-probe.js"></script>
     <script src="../shared/series-card.js"></script>
+    <script src="../shared/i18n.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

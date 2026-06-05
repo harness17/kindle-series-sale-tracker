@@ -1,7 +1,14 @@
 (function () {
   'use strict';
 
-  const api = window.__KST__;
+  const api = globalThis.__KST__ || window.__KST__;
+  let currentLang = 'ja';
+  function t(key) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    var kstI18n = typeof window !== 'undefined' && window.__KST_I18N__;
+    if (!kstI18n) return key;
+    return kstI18n.translate.apply(null, [currentLang, key].concat(args));
+  }
   const BATCH_SIZE = 100;
   const AJAX_URL = 'https://www.amazon.co.jp/hz/mycd/digital-console/ajax';
   // Amazon の Ajax は1ソート順あたり約1万件で頭打ちになる。安全上限はその少し上に置く。
@@ -61,8 +68,7 @@
     }
     banner.querySelector('.kst-title').textContent = message;
     fill.style.width = `${pct}%`;
-    banner.querySelector('.kst-detail').textContent =
-      `${value.toLocaleString()} / ${max ? max.toLocaleString() : '?'} 件（${pct}%）`;
+    banner.querySelector('.kst-detail').textContent = t('progressDetail', value, max, pct);
   }
 
   function hideBannerSoon() {
@@ -179,17 +185,17 @@
     });
 
     if (!response.ok) {
-      throw new Error(`Amazon の応答が ${response.status} でした。`);
+      throw new Error(t('amazonErrorStatus', response.status));
     }
 
     const json = await response.json();
     if (json.success === false) {
-      throw new Error(json.error || 'Amazon 側で取得に失敗しました。');
+      throw new Error(json.error || t('amazonFetchError'));
     }
 
     const data = json.GetContentOwnershipData;
     if (!data || !Array.isArray(data.items)) {
-      throw new Error('Kindle 所有データの形式を認識できませんでした。');
+      throw new Error(t('dataFormatError'));
     }
 
     return { batch: api.extractOwnershipItems(json), numberOfItems: data.numberOfItems };
@@ -199,13 +205,11 @@
     // 拡張を再読み込みすると、開いたままのページに残る旧 content script は
     // コンテキストが無効化され chrome.storage が失われる。先に検知して明示する。
     if (!chrome.runtime?.id || !chrome.storage?.local) {
-      throw new Error(
-        '拡張機能が更新されました。この Kindle 一覧ページを再読み込み（F5）してから、もう一度スキャンしてください。'
-      );
+      throw new Error(t('extensionUpdated'));
     }
     const csrfToken = findCsrfToken();
     if (!csrfToken) {
-      throw new Error('csrfToken が見つかりません。Amazon.co.jp にログインし直してから再試行してください。');
+      throw new Error(t('csrfNotFound'));
     }
     return csrfToken;
   }
@@ -234,11 +238,7 @@
 
           const target = Math.max(reportedTotal, byAsin.size);
           await saveProgress(byAsin.size, target, 'running');
-          showProgress(
-            `Kindle蔵書を全件取得中（${passIndex + 1}/${SORT_PASSES.length}）`,
-            byAsin.size,
-            target
-          );
+          showProgress(t('fullScanProgress', passIndex + 1, SORT_PASSES.length), byAsin.size, target);
 
           // サーバ申告の総数に到達 = 全件回収済み。残りは重複なので全パスを打ち切る。
           if (reportedTotal > 0 && byAsin.size >= reportedTotal) {
@@ -283,7 +283,7 @@
         }
       }
 
-      showProgress(`新着を確認中…（既知に到達で停止）`, newByAsin.size, newByAsin.size);
+      showProgress(t('simpleScanProgress'), newByAsin.size, newByAsin.size);
       await saveProgress(scanned, scanned, 'running');
 
       // 既知 ASIN が十分連続した = 新着領域を抜けた。これ以上さかのぼらない。
@@ -319,6 +319,11 @@
 
   // mode: 'full' | 'simple'
   async function collectKindleBooks(mode) {
+    const i18n = typeof window !== 'undefined' && window.__KST_I18N__;
+    if (i18n) {
+      const langData = await chrome.storage.local.get(i18n.LANGUAGE_KEY);
+      currentLang = i18n.normalizeLanguage(langData[i18n.LANGUAGE_KEY]);
+    }
     const csrfToken = ensureContext();
 
     let minimalBooks;
@@ -330,7 +335,7 @@
       const existingItems = Array.isArray(existing?.items) ? existing.items : [];
       if (existingItems.length === 0) {
         // 差分の基準が無い（初回・旧縮退データ）。簡易は使えないのでフルへ誘導。
-        throw new Error('簡易更新には前回のスキャン結果が必要です。先に「全件取得」を実行してください。');
+        throw new Error(t('simpleScanNeedsBase'));
       }
       const existingMinimal = existingItems.map((b) => api.toMinimalBook(b));
       const knownAsins = new Set(existingMinimal.map((b) => b.asin));
@@ -338,7 +343,7 @@
       const merged = api.mergeScan(existingMinimal, newBooks);
       minimalBooks = merged.minimalBooks;
       series = preserveSeriesThumbnails(merged.series, existing.series, newBooks);
-      addedNote = `新着${merged.added}冊を追加`;
+      addedNote = t('addedBooks', merged.added);
     } else {
       const normalized = await collectAllBooks(csrfToken);
       minimalBooks = normalized.map((b) => api.toMinimalBook(b));
@@ -363,15 +368,12 @@
 
     if (saved.degraded) {
       // 最小書誌でも上限を超える規模（理論上ほぼ無いが多層防御）。シリーズ一覧だけ保存。
-      showBanner(
-        '保存容量の上限によりシリーズ一覧のみ保存しました',
-        `明細${saved.omitted}冊は未保存（簡易更新・CSV/JSONは要再取得）`
-      );
+      showBanner(t('quotaWarning'), t('degradedDetail', saved.omitted));
     } else {
       const detail = addedNote
-        ? `${addedNote} / 計${minimalBooks.length}冊・${series.length}シリーズ候補`
-        : `${minimalBooks.length}冊 / ${series.length}シリーズ候補`;
-      showBanner('Kindle蔵書の取得が完了しました', detail);
+        ? t('simpleScanDetail', addedNote, minimalBooks.length, series.length)
+        : t('basicScanDetail', minimalBooks.length, series.length);
+      showBanner(t('scanComplete'), detail);
       hideBannerSoon();
     }
     return result;
@@ -380,6 +382,11 @@
   // エクスポート用: 保存はせず、全件をフル書誌（title/authors 付き）で取得して返す。
   // 保存データは最小書誌のため、CSV/JSON の明細出力にはその場での再取得が必要。
   async function collectForExport() {
+    const i18n = typeof window !== 'undefined' && window.__KST_I18N__;
+    if (i18n) {
+      const langData = await chrome.storage.local.get(i18n.LANGUAGE_KEY);
+      currentLang = i18n.normalizeLanguage(langData[i18n.LANGUAGE_KEY]);
+    }
     const csrfToken = ensureContext();
     const normalized = await collectAllBooks(csrfToken);
     hideBannerSoon();
@@ -397,7 +404,7 @@
           } catch (progressError) {
             console.warn('Failed to save Kindle scan error progress', progressError);
           }
-          showBanner('Kindle蔵書の取得に失敗しました', error.message);
+          showBanner(t('scanFailed'), error.message);
           sendResponse({ ok: false, error: error.message });
         });
       return true;

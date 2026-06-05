@@ -57,11 +57,19 @@
 
   function renderStatusBlock(targetEl, cached, options) {
     const completed = !!(options && options.completed);
+    const cardLang = (options && options.lang) || 'ja';
+    const cardI18n = typeof window !== 'undefined' && window.__KST_I18N__;
+    function ct(key) {
+      var args = Array.prototype.slice.call(arguments, 1);
+      if (!cardI18n) return key;
+      return cardI18n.translate.apply(null, [cardLang, key].concat(args));
+    }
+
     targetEl.textContent = '';
     targetEl.classList.add('status-block');
 
     if (completed) {
-      appendBadge(targetEl, 'badge completed', '完結');
+      appendBadge(targetEl, 'badge completed', ct('completed'));
       return;
     }
 
@@ -72,29 +80,29 @@
 
     if (offer && offer.priceText) {
       appendSpace(targetEl);
-      appendBadge(targetEl, 'badge price', `価格 ${offer.priceText}`);
+      appendBadge(targetEl, 'badge price', ct('priceText', offer.priceText));
     }
 
     appendSpace(targetEl);
     if (!cached) {
-      appendBadge(targetEl, 'badge', '未照会');
+      appendBadge(targetEl, 'badge', ct('unchecked'));
     } else if (cached.stale) {
-      appendBadge(targetEl, 'badge recheck', '要再確認');
+      appendBadge(targetEl, 'badge recheck', ct('stale'));
     } else if (cached.status === 'has-next') {
-      appendBadge(targetEl, 'badge next', `続刊 ${cached.nextVolume}巻`);
+      appendBadge(targetEl, 'badge next', ct('hasNextVol', cached.nextVolume));
       if (cached.nextUrl) {
         appendSpace(targetEl);
         const link = document.createElement('a');
         link.href = cached.nextUrl;
         link.target = '_blank';
         link.rel = 'noreferrer';
-        link.textContent = cached.nextTitle || '購入ページ';
+        link.textContent = cached.nextTitle || ct('buyPage');
         targetEl.appendChild(link);
       }
     } else if (cached.status === 'no-next') {
-      appendBadge(targetEl, 'badge', '続刊なし');
+      appendBadge(targetEl, 'badge', ct('noNextVol'));
     } else {
-      appendBadge(targetEl, 'badge', '判定不能');
+      appendBadge(targetEl, 'badge', ct('unknown'));
     }
 
     const showLatest =
@@ -104,7 +112,7 @@
     if (showLatest) {
       appendSpace(targetEl);
       const date = cached.latestReleaseDate ? ` ${cached.latestReleaseDate}` : '';
-      appendBadge(targetEl, 'badge latest-date', `最新 ${cached.latestVolume}巻${date}`);
+      appendBadge(targetEl, 'badge latest-date', ct('latestVolInfo', cached.latestVolume, date));
     }
 
     if (
@@ -122,9 +130,9 @@
         const estimated = Math.round(
           (cached.completionCost / cached.completionFoundCount) * cached.completionExpectedSpan
         );
-        label = `完結コスト 約￥${estimated.toLocaleString('ja-JP')}（推定）`;
+        label = ct('completionCostPartial', estimated);
       } else {
-        label = `完結コスト ￥${cached.completionCost.toLocaleString('ja-JP')}（${cached.completionFoundCount}巻）`;
+        label = ct('completionCostFull', cached.completionCost, cached.completionFoundCount);
       }
       appendBadge(targetEl, 'badge completion-cost', label);
     }
