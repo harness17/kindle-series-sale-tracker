@@ -123,7 +123,7 @@
       confirmClearScan: 'スキャン結果を削除しますか？\nシリーズ一覧がクリアされます。再スキャンが必要です。\n（完結・優先・除外フラグは保持されます）',
       dangerHeading: 'データ削除',
       automationHeading: '自動化',
-      autoScanLabel: 'Kindleページ訪問時に自動スキャン',
+      autoScanLabel: 'Kindle一覧ページ訪問時に自動スキャン',
       autoScanIntervalLabel: 'スキャン間隔',
       bgProbeLabel: 'バックグラウンドで続刊・セールを確認',
       bgProbeIntervalLabel: '照会間隔',
