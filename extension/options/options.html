@@ -31,9 +31,9 @@
         <input id="search" type="search" data-i18n-placeholder="searchPlaceholder" placeholder="シリーズ名・著者で絞り込み" />
         <label class="select-control"><span data-i18n="sortLabel">並び替え</span>
           <select id="sort">
+            <option value="discount" data-i18n="sortDiscount2">割引率（高い順）</option>
             <option value="count" data-i18n="sortCount">所有冊数（多い順）</option>
             <option value="volume" data-i18n="sortVolume">最高巻（大きい順）</option>
-            <option value="discount" data-i18n="sortDiscount2">割引率（高い順）</option>
             <option value="title" data-i18n="sortTitle">タイトル（あいうえお順）</option>
           </select>
         </label>
@@ -58,6 +58,28 @@
         <button id="clearCache" type="button" class="secondary" data-i18n="clearCache">× 照会キャッシュをクリア</button>
         <button id="clearScan" type="button" class="secondary" data-i18n="clearScan">× スキャン結果をクリア</button>
         <span class="summary" data-i18n="clearNote">※完結・優先フラグは保持されます</span>
+      </div>
+    </section>
+
+    <section class="automation-settings" aria-labelledby="automationHeading">
+      <h2 id="automationHeading" data-i18n="automationHeading">自動化</h2>
+      <div class="toolbar-filters">
+        <label class="chip"><input id="autoScanEnabled" type="checkbox" /><span data-i18n="autoScanLabel"> Kindleページ訪問時に自動スキャン</span></label>
+        <label class="select-control"><span data-i18n="autoScanIntervalLabel">スキャン間隔</span>
+          <select id="autoScanInterval">
+            <option value="3" data-i18n="days3">3日</option>
+            <option value="7" data-i18n="days7">7日</option>
+            <option value="14" data-i18n="days14">14日</option>
+          </select>
+        </label>
+        <label class="chip"><input id="bgProbeEnabled" type="checkbox" /><span data-i18n="bgProbeLabel"> バックグラウンドで続刊・セールを確認</span></label>
+        <label class="select-control"><span data-i18n="bgProbeIntervalLabel">照会間隔</span>
+          <select id="bgProbeInterval">
+            <option value="12" data-i18n="hours12">12時間</option>
+            <option value="24" data-i18n="hours24">24時間</option>
+            <option value="48" data-i18n="hours48">48時間</option>
+          </select>
+        </label>
       </div>
     </section>
 

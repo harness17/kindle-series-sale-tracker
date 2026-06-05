@@ -4,7 +4,7 @@
   "version": "0.2.0",
   "description": "__MSG_extDescription__",
   "default_locale": "ja",
-  "permissions": ["activeTab", "storage", "sidePanel"],
+  "permissions": ["activeTab", "storage", "sidePanel", "alarms", "offscreen"],
   "host_permissions": ["https://www.amazon.co.jp/*"],
   "options_page": "options/options.html",
   "action": {

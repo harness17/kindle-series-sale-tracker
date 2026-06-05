@@ -8,6 +8,8 @@
   const CACHE_KEY = 'kstCatalogCache';
   const COMPLETED_KEY = 'kstCompletedSeries';
   const PRIORITY_KEY = 'kstPrioritySeries';
+  const EXCLUDED_KEY = 'kstExcludedSeries';
+  const BG_BADGE_COUNT_KEY = 'kstBgBadgeCount';
   const THEME_KEY = 'kstTheme';
   const LANGUAGE_KEY = i18n.LANGUAGE_KEY;
   const REQUEST_DELAY_MS = 350;
@@ -80,14 +82,22 @@
   }
 
   async function getLastScan() {
-    const data = await chrome.storage.local.get([api.STORAGE_KEY, CACHE_KEY, COMPLETED_KEY, PRIORITY_KEY]);
+    const data = await chrome.storage.local.get([
+      api.STORAGE_KEY,
+      CACHE_KEY,
+      COMPLETED_KEY,
+      PRIORITY_KEY,
+      EXCLUDED_KEY,
+    ]);
     const scan = data[api.STORAGE_KEY] || null;
     if (scan && Array.isArray(scan.series)) {
       const cache = data[CACHE_KEY] || {};
       const completed = data[COMPLETED_KEY] || {};
       const priority = data[PRIORITY_KEY] || {};
+      const excluded = data[EXCLUDED_KEY] || {};
       scan.series = scan.series
         .filter((s) => !completed[s.key])
+        .filter((s) => !excluded[s.key])
         // 保存済みタイトルが二重エンコード（&amp;amp; 等）のまま残るケースを表示時に復号する。
         .map((s) => ({
           ...s,
@@ -393,6 +403,9 @@
   document.getElementById('exportJson').addEventListener('click', () => exportBooks('json'));
 
   async function init() {
+    if (chrome.action?.setBadgeText) chrome.action.setBadgeText({ text: '' });
+    chrome.storage.local.set({ [BG_BADGE_COUNT_KEY]: 0 });
+
     const data = await chrome.storage.local.get([THEME_KEY, LANGUAGE_KEY]);
     lang = i18n.normalizeLanguage(data[LANGUAGE_KEY]);
     langToggle.value = lang;

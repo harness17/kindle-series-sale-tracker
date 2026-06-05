@@ -15,6 +15,9 @@
   const MAX_START_INDEX = 10500;
   // 連続リクエストの間隔。複数ソートパスで負荷が倍増するため throttle / 403 を避ける。
   const REQUEST_DELAY_MS = 120;
+  const AUTO_SCAN_ENABLED_KEY = 'kstAutoScanEnabled';
+  const AUTO_SCAN_INTERVAL_KEY = 'kstAutoScanIntervalD';
+  const AUTO_SCAN_LAST_ATTEMPT_KEY = 'kstAutoScanLastAttempt';
   // 各ソート順は1万件で頭打ちになる。異なる軸（取得日・タイトル・著者）×昇順/降順で
   // 取得して ASIN マージすると、それぞれ別の「先頭1万件」が見えるため壁を越えられる。
   // 取得日2軸だけなら最大2万件、6パスなら理論上6万件規模までカバーできる。
@@ -32,6 +35,7 @@
   // 新着領域を抜けたとみなして取得を止める。先頭付近の並び替え揺れに耐えるため
   // 「最初の既知1件」ではなく連続ランで判定する。
   const SIMPLE_KNOWN_RUN_STOP = 200;
+  let silentAutoScan = false;
 
   function delay(ms) {
     return new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -48,6 +52,7 @@
   }
 
   function showBanner(message, detail) {
+    if (silentAutoScan) return;
     const banner = ensureBanner();
     banner.innerHTML = `<strong></strong><span></span>`;
     banner.querySelector('strong').textContent = message;
@@ -56,6 +61,7 @@
 
   // 取得進捗をゲージ付きで表示する。既存のバーがあれば width だけ更新して滑らかに伸ばす。
   function showProgress(message, value, max) {
+    if (silentAutoScan) return;
     const banner = ensureBanner();
     const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
     let fill = banner.querySelector('.kst-progress-fill');
@@ -72,6 +78,7 @@
   }
 
   function hideBannerSoon() {
+    if (silentAutoScan) return;
     window.setTimeout(() => {
       document.getElementById('kst-scan-banner')?.remove();
     }, 3000);
@@ -393,6 +400,31 @@
     return normalized;
   }
 
+  async function maybeAutoScan() {
+    const data = await chrome.storage.local.get([
+      AUTO_SCAN_ENABLED_KEY,
+      AUTO_SCAN_INTERVAL_KEY,
+      api.STORAGE_KEY,
+      AUTO_SCAN_LAST_ATTEMPT_KEY,
+    ]);
+    if (!data[AUTO_SCAN_ENABLED_KEY]) return;
+
+    const intervalD = Number(data[AUTO_SCAN_INTERVAL_KEY]) || 7;
+    const scan = data[api.STORAGE_KEY] || null;
+    const lastAttempt = Number(data[AUTO_SCAN_LAST_ATTEMPT_KEY]) || 0;
+    const staleness = Math.max(Number(scan?.scannedAt) || 0, lastAttempt);
+    if (Date.now() - staleness < intervalD * 86400000) return;
+
+    await chrome.storage.local.set({ [AUTO_SCAN_LAST_ATTEMPT_KEY]: Date.now() });
+    silentAutoScan = true;
+    const mode = Array.isArray(scan?.items) && scan.items.length > 0 ? 'simple' : 'full';
+    try {
+      await collectKindleBooks(mode);
+    } finally {
+      silentAutoScan = false;
+    }
+  }
+
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === 'kst:startScan') {
       const mode = message.mode === 'simple' ? 'simple' : 'full';
@@ -419,4 +451,6 @@
 
     return false;
   });
+
+  maybeAutoScan().catch((e) => console.warn('[KST] auto-scan error', e));
 })();

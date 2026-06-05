@@ -9,6 +9,11 @@
   const COMPLETED_KEY = 'kstCompletedSeries'; // 手動の完結フラグ { [seriesKey]: true }
   const PRIORITY_KEY = 'kstPrioritySeries'; // 優先表示フラグ { [seriesKey]: true }
   const EXCLUDED_KEY = 'kstExcludedSeries'; // 除外フラグ { [seriesKey]: true }
+  const SEARCH_CONDITIONS_KEY = 'kstOptionsSearchConditions';
+  const AUTO_SCAN_ENABLED_KEY = 'kstAutoScanEnabled';
+  const AUTO_SCAN_INTERVAL_KEY = 'kstAutoScanIntervalD';
+  const BG_PROBE_ENABLED_KEY = 'kstBgProbeEnabled';
+  const BG_PROBE_INTERVAL_KEY = 'kstBgProbeIntervalH';
   const THEME_KEY = 'kstTheme';
   const LANGUAGE_KEY = i18n.LANGUAGE_KEY;
   const REQUEST_DELAY_MS = 350; // 一括照会の間隔（throttle/403 回避）
@@ -33,6 +38,10 @@
     checkSimple: document.getElementById('checkSimple'),
     clearCache: document.getElementById('clearCache'),
     clearScan: document.getElementById('clearScan'),
+    autoScanEnabled: document.getElementById('autoScanEnabled'),
+    autoScanInterval: document.getElementById('autoScanInterval'),
+    bgProbeEnabled: document.getElementById('bgProbeEnabled'),
+    bgProbeInterval: document.getElementById('bgProbeInterval'),
     themeToggle: document.getElementById('themeToggle'),
     langToggle: document.getElementById('langToggle'),
     list: document.getElementById('list'),
@@ -88,6 +97,65 @@
     await chrome.storage.local.set({ [LANGUAGE_KEY]: lang });
     i18n.applyI18n(document, lang);
     render();
+  }
+
+  function selectValue(select, value, fallback) {
+    const exists = Array.from(select.options).some((option) => option.value === value);
+    select.value = exists ? value : fallback;
+  }
+
+  function currentSearchConditions() {
+    return {
+      search: els.search.value,
+      sort: els.sort.value,
+      filterMissing: els.filterMissing.checked,
+      filterPriority: els.filterPriority.checked,
+      filterStatus: els.filterStatus.value,
+      filterHideCompleted: els.filterHideCompleted.checked,
+      filterExcluded: els.filterExcluded.checked,
+      filterSale: els.filterSale.checked,
+    };
+  }
+
+  function applySearchConditions(value) {
+    if (!value || typeof value !== 'object') return;
+    els.search.value = typeof value.search === 'string' ? value.search : '';
+    selectValue(els.sort, value.sort, 'discount');
+    selectValue(els.filterStatus, value.filterStatus, 'all');
+    els.filterMissing.checked = value.filterMissing === true;
+    els.filterPriority.checked = value.filterPriority === true;
+    els.filterHideCompleted.checked = value.filterHideCompleted === true;
+    els.filterExcluded.checked = value.filterExcluded === true;
+    els.filterSale.checked = value.filterSale === true;
+  }
+
+  function saveSearchConditions() {
+    chrome.storage.local.set({ [SEARCH_CONDITIONS_KEY]: currentSearchConditions() });
+  }
+
+  function handleSearchConditionsChange() {
+    render();
+    saveSearchConditions();
+  }
+
+  function applyAutomationSettings(data) {
+    els.autoScanEnabled.checked = data[AUTO_SCAN_ENABLED_KEY] === true;
+    selectValue(els.autoScanInterval, String(data[AUTO_SCAN_INTERVAL_KEY] || 7), '7');
+    els.bgProbeEnabled.checked = data[BG_PROBE_ENABLED_KEY] === true;
+    selectValue(els.bgProbeInterval, String(data[BG_PROBE_INTERVAL_KEY] || 24), '24');
+  }
+
+  function reconcileAlarms() {
+    chrome.runtime.sendMessage({ type: 'kst:reconcileAlarms' }, () => {
+      if (chrome.runtime.lastError) {
+        console.warn('[KST] alarm reconcile message failed', chrome.runtime.lastError.message);
+      }
+    });
+  }
+
+  async function saveAutomationSetting(key, value) {
+    await chrome.storage.local.set({ [key]: value });
+    reconcileAlarms();
   }
 
   async function load() {
@@ -454,24 +522,44 @@
     els.summary.textContent = t('scanCleared');
   }
 
-  els.search.addEventListener('input', render);
-  els.sort.addEventListener('change', render);
-  els.filterMissing.addEventListener('change', render);
-  els.filterPriority.addEventListener('change', render);
-  els.filterStatus.addEventListener('change', render);
-  els.filterHideCompleted.addEventListener('change', render);
-  els.filterExcluded.addEventListener('change', render);
-  els.filterSale.addEventListener('change', render);
+  els.search.addEventListener('input', handleSearchConditionsChange);
+  els.sort.addEventListener('change', handleSearchConditionsChange);
+  els.filterMissing.addEventListener('change', handleSearchConditionsChange);
+  els.filterPriority.addEventListener('change', handleSearchConditionsChange);
+  els.filterStatus.addEventListener('change', handleSearchConditionsChange);
+  els.filterHideCompleted.addEventListener('change', handleSearchConditionsChange);
+  els.filterExcluded.addEventListener('change', handleSearchConditionsChange);
+  els.filterSale.addEventListener('change', handleSearchConditionsChange);
   els.checkVisible.addEventListener('click', startFullBulk);
   els.checkSimple.addEventListener('click', startSimpleBulk);
   els.clearCache.addEventListener('click', clearCache);
   els.clearScan.addEventListener('click', clearScan);
+  els.autoScanEnabled.addEventListener('change', () =>
+    saveAutomationSetting(AUTO_SCAN_ENABLED_KEY, els.autoScanEnabled.checked)
+  );
+  els.autoScanInterval.addEventListener('change', () =>
+    saveAutomationSetting(AUTO_SCAN_INTERVAL_KEY, Number(els.autoScanInterval.value))
+  );
+  els.bgProbeEnabled.addEventListener('change', () =>
+    saveAutomationSetting(BG_PROBE_ENABLED_KEY, els.bgProbeEnabled.checked)
+  );
+  els.bgProbeInterval.addEventListener('change', () =>
+    saveAutomationSetting(BG_PROBE_INTERVAL_KEY, Number(els.bgProbeInterval.value))
+  );
   els.themeToggle.addEventListener('change', () => applyTheme(els.themeToggle.value));
   els.langToggle.addEventListener('change', (e) => applyLang(e.target.value));
   if (els.topLink) els.topLink.addEventListener('click', scrollToTop);
 
   async function init() {
-    const data = await chrome.storage.local.get([THEME_KEY, LANGUAGE_KEY]);
+    const data = await chrome.storage.local.get([
+      THEME_KEY,
+      LANGUAGE_KEY,
+      SEARCH_CONDITIONS_KEY,
+      AUTO_SCAN_ENABLED_KEY,
+      AUTO_SCAN_INTERVAL_KEY,
+      BG_PROBE_ENABLED_KEY,
+      BG_PROBE_INTERVAL_KEY,
+    ]);
 
     lang = i18n.normalizeLanguage(data[LANGUAGE_KEY]);
     els.langToggle.value = lang;
@@ -482,6 +570,8 @@
     setLocalTheme(theme);
     applyThemeToDocument(theme);
 
+    applySearchConditions(data[SEARCH_CONDITIONS_KEY]);
+    applyAutomationSettings(data);
     await load();
   }
 
