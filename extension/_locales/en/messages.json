@@ -1,0 +1,14 @@
+{
+  "extName": {
+    "message": "Kindle Series Sale Tracker",
+    "description": "Extension name"
+  },
+  "extDescription": {
+    "message": "Extracts series candidates from your Amazon.co.jp Kindle library and creates a list for tracking new volumes.",
+    "description": "Extension description"
+  },
+  "actionTitle": {
+    "message": "Kindle Series Sale Tracker",
+    "description": "Sidebar / action title"
+  }
+}
