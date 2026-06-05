@@ -510,6 +510,7 @@
   }
 
   async function clearCache() {
+    if (!confirm(t('confirmClearCache'))) return;
     cache = {};
     await chrome.storage.local.remove(CACHE_KEY);
     render();
@@ -517,6 +518,7 @@
   }
 
   async function clearScan() {
+    if (!confirm(t('confirmClearScan'))) return;
     await chrome.storage.local.remove([api.STORAGE_KEY, api.PROGRESS_KEY]);
     await load();
     els.summary.textContent = t('scanCleared');

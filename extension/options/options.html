@@ -55,9 +55,6 @@
         <label class="chip"><input id="filterHideCompleted" type="checkbox" /><span data-i18n="filterHideCompleted"> 完結を隠す</span></label>
         <label class="chip"><input id="filterExcluded" type="checkbox" /><span data-i18n="filterExcluded"> 除外を隠す</span></label>
         <label class="chip"><input id="filterSale" type="checkbox" /><span data-i18n="filterSale"> セール中</span></label>
-        <button id="clearCache" type="button" class="secondary" data-i18n="clearCache">× 照会キャッシュをクリア</button>
-        <button id="clearScan" type="button" class="secondary" data-i18n="clearScan">× スキャン結果をクリア</button>
-        <span class="summary" data-i18n="clearNote">※完結・優先フラグは保持されます</span>
       </div>
     </section>
 
@@ -84,6 +81,14 @@
     </section>
 
     <main id="list" class="list"></main>
+    <section class="danger-zone" aria-labelledby="dangerHeading">
+      <h2 id="dangerHeading" data-i18n="dangerHeading">データ削除</h2>
+      <div class="danger-zone-actions">
+        <button id="clearCache" type="button" class="danger" data-i18n="clearCache">× 照会キャッシュをクリア</button>
+        <button id="clearScan" type="button" class="danger" data-i18n="clearScan">× スキャン結果をクリア</button>
+      </div>
+      <span class="summary" data-i18n="clearNote">※完結・優先フラグは保持されます</span>
+    </section>
     <a class="top-link" href="#pageTop" data-i18n="topLink">↑ トップへ</a>
 
     <script src="../shared/kindle-library.js"></script>

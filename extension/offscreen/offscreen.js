@@ -34,6 +34,8 @@
     let badgeCount = Number(message.currentBadgeCount) || 0;
     let isFirst = true;
 
+    console.log('[KST] offscreen probe chunk: %d series', chunk.length);
+
     for (const series of chunk) {
       if (!isFirst) await delay(REQUEST_DELAY_MS);
       isFirst = false;

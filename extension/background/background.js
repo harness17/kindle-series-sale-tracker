@@ -184,6 +184,7 @@
     const excluded = data[EXCLUDED_KEY] || {};
     const eligible = eligibleSeries(data[STORAGE_KEY], completed, excluded);
     if (eligible.length === 0) {
+      console.log('[KST] background probe: no eligible series');
       await storageSet({ [BG_PROBE_QUEUE_KEY]: { cursor: 0, lastCycleAt: Date.now() } });
       await setBadge(data[BG_BADGE_COUNT_KEY]);
       return;
@@ -193,9 +194,15 @@
     const chunk = eligible.slice(queue.cursor, queue.cursor + CHUNK_SIZE);
     const prevCache = data[CACHE_KEY] || {};
     const currentBadgeCount = Number(data[BG_BADGE_COUNT_KEY]) || 0;
+    const mode = shouldUseOffscreen() ? 'offscreen' : 'inline';
+    console.log(
+      '[KST] background probe started: %d/%d series (cursor %d, chunk %d, mode %s)',
+      chunk.length, eligible.length, queue.cursor, CHUNK_SIZE, mode
+    );
+    const t0 = Date.now();
     let response;
 
-    if (shouldUseOffscreen()) {
+    if (mode === 'offscreen') {
       try {
         await ensureOffscreenDocument();
         response = await sendRuntimeMessage({
@@ -214,6 +221,10 @@
 
     const badgeCount = Number(response?.badgeCount) || 0;
     await setBadge(badgeCount);
+    console.log(
+      '[KST] background probe done: %dms, badge=%d',
+      Date.now() - t0, badgeCount
+    );
   }
 
   if (chrome.runtime?.onInstalled) {
