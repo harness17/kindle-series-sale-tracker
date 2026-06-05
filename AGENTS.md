@@ -1,6 +1,6 @@
 # AGENTS.md (kindle-series-sale-tracker)
 
-Amazon.co.jp の Kindle 蔵書一覧からシリーズ候補を抽出し、続刊確認用リストを作る Chrome 拡張プロトタイプ。Manifest V3 / 素の JavaScript。
+Amazon.co.jp の Kindle 蔵書一覧からシリーズ候補を抽出し、続刊確認用リストを作る Chrome / Firefox 拡張プロトタイプ。Manifest V3 / 素の JavaScript。
 
 ## 検証コマンド
 
@@ -35,5 +35,5 @@ node .\verify-catalog-probe.mjs
 
 - Amazon 内部 Ajax 依存のため、ページ変更で壊れる可能性がある
 - シリーズ名と巻数はタイトル文字列からの簡易推定
-- 価格・セール情報は未実装
+- 価格・セール情報は続刊照会時にAmazon検索結果から取れた範囲だけ表示する
 - host permissions や store package 作成はユーザー確認を挟む

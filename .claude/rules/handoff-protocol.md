@@ -1,6 +1,6 @@
 # Handoff Protocol
 
-`CLAUDE_CODE_HANDOFF.md` は Codex と Claude Code の共有作業ログ。最新の追記を上に置く。初回 handoff 発生時にリポジトリ直下へ作成する。
+`CLAUDE_CODE_HANDOFF.md` は Codex と Claude Code のローカル共有作業ログ。最新の追記を上に置く。初回 handoff 発生時にリポジトリ直下へ作成する。このファイルは公開リポジトリには含めない。
 
 ## 追記するタイミング
 
