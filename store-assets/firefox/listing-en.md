@@ -2,8 +2,8 @@
 
 ## Upload Package
 
-- Zip: `dist/firefox/kindle-series-sale-tracker-firefox-v0.2.0.zip`
-- Version: `0.2.0`
+- Zip: `dist/firefox/kindle-series-sale-tracker-firefox-v0.3.0.zip`
+- Version: `0.3.0`
 - Extension ID: `kindle-series-sale-tracker@harness`
 
 ## Graphic Assets
@@ -44,9 +44,11 @@ Features:
 • Export your series list as CSV or JSON
 • Firefox sidebar panel and dedicated options page
 • Japanese / English UI toggle
+• Opt-in background check for new volumes and sales (badge notification)
+• Opt-in auto-scan when visiting the Kindle library page
 
 Privacy:
-All scan results and settings are stored locally in your browser. No data is sent to any external server. Amazon credentials, cookies, and purchase history are never stored or transmitted.
+All scan results and settings are stored locally in your browser. No data is sent to any external server. Background checks also target only Amazon.co.jp pages, with results stored locally. Amazon credentials, cookies, and purchase history are never stored or transmitted.
 
 Note:
 This extension depends on Amazon.co.jp page structure. Changes on Amazon's side may affect library scanning or follow-up checks. Prices, discounts, and release dates are shown only when retrievable from Amazon.co.jp search results.
@@ -54,23 +56,23 @@ This extension depends on Amazon.co.jp page structure. Changes on Amazon's side 
 This extension is designed for Amazon.co.jp (Japanese Kindle store) only.
 ```
 
-## Version Notes (0.2.0)
+## Version Notes (0.3.0)
 
 ```text
-Version 0.2.0
+Version 0.3.0
 
 New in this version:
+- Opt-in background check for new volumes and sales (badge notification)
+- Opt-in auto-scan when visiting the Kindle library page
+- Confirmation dialog for data deletion
+- Excluded series filter and search condition persistence
+
+Previous updates:
 - Japanese / English UI toggle
 - Series completion cost estimate
 - Improved next-volume detection for long series (gap detection + supplemental search + pagination)
 - Firefox sidebar support
 - MIT License and Privacy Policy
-
-Initial features:
-- Amazon.co.jp Kindle library manual scan
-- Series candidates, owned volume ranges, gap detection
-- Follow-up volume, price, discount rate, release date check
-- CSV / JSON export
 ```
 
 ## Data Collection / Privacy
@@ -98,7 +100,13 @@ Amazon credentials, cookies, and passwords are never stored or transmitted.
 ### `storage`
 
 ```text
-Used to save scan results, follow-up check cache, theme settings, and per-series flags (priority, completed, excluded) locally in the browser.
+Used to save scan results, follow-up check cache, theme settings, per-series flags (priority, completed, excluded), and automation settings locally in the browser.
+```
+
+### `alarms`
+
+```text
+Used to schedule opt-in background checks for new volumes and sales. The alarm fires only when the user enables this feature in the options page.
 ```
 
 ### `activeTab`
@@ -110,7 +118,7 @@ Used to send a scan-start message to the Amazon.co.jp Kindle library page curren
 ### `https://www.amazon.co.jp/*`
 
 ```text
-Required to run the content script on the Kindle library page and to fetch Amazon.co.jp search result pages (after explicit user action) for follow-up volume candidates, prices, discounts, release dates, and thumbnails. No other websites are accessed.
+Required to run the content script on the Kindle library page and to fetch Amazon.co.jp search result pages (after explicit user action or opt-in background schedule) for follow-up volume candidates, prices, discounts, release dates, and thumbnails. No other websites are accessed.
 ```
 
 ## Reviewer Notes
@@ -126,6 +134,7 @@ Review steps:
 5. On the Kindle library page, click the full scan or quick update button.
 6. After the scan completes, open the sidebar or dedicated page to view series candidates.
 7. Click the follow-up check button to fetch Amazon.co.jp search results and show next-volume information.
+8. Open the dedicated options page and scroll to the "Automation" section. Enable "Check next volumes and sales in the background" and "Auto-scan when visiting the Kindle library" to test opt-in automation features.
 
 No test account is provided because the extension only works with the reviewer's own Amazon.co.jp browser session. The extension does not collect or transmit Amazon credentials.
 
