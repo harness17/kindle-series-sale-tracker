@@ -4,13 +4,25 @@
   const api = window.__KST__;
   const catalog = window.__KST_CATALOG__;
   const card = window.__KST_CARD__;
+  const i18n = window.__KST_I18N__;
   const CACHE_KEY = 'kstCatalogCache';
   const COMPLETED_KEY = 'kstCompletedSeries'; // 手動の完結フラグ { [seriesKey]: true }
   const PRIORITY_KEY = 'kstPrioritySeries'; // 優先表示フラグ { [seriesKey]: true }
   const EXCLUDED_KEY = 'kstExcludedSeries'; // 除外フラグ { [seriesKey]: true }
+  const SEARCH_CONDITIONS_KEY = 'kstOptionsSearchConditions';
+  const AUTO_SCAN_ENABLED_KEY = 'kstAutoScanEnabled';
+  const AUTO_SCAN_INTERVAL_KEY = 'kstAutoScanIntervalD';
+  const BG_PROBE_ENABLED_KEY = 'kstBgProbeEnabled';
+  const BG_PROBE_INTERVAL_KEY = 'kstBgProbeIntervalH';
   const THEME_KEY = 'kstTheme';
+  const LANGUAGE_KEY = i18n.LANGUAGE_KEY;
   const REQUEST_DELAY_MS = 350; // 一括照会の間隔（throttle/403 回避）
   let bulkAbort = false; // 一括照会のキャンセルフラグ
+  let lang = 'ja';
+  function t(key) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    return i18n.translate.apply(null, [lang, key].concat(args));
+  }
 
   const els = {
     summary: document.getElementById('summary'),
@@ -26,7 +38,12 @@
     checkSimple: document.getElementById('checkSimple'),
     clearCache: document.getElementById('clearCache'),
     clearScan: document.getElementById('clearScan'),
+    autoScanEnabled: document.getElementById('autoScanEnabled'),
+    autoScanInterval: document.getElementById('autoScanInterval'),
+    bgProbeEnabled: document.getElementById('bgProbeEnabled'),
+    bgProbeInterval: document.getElementById('bgProbeInterval'),
     themeToggle: document.getElementById('themeToggle'),
+    langToggle: document.getElementById('langToggle'),
     list: document.getElementById('list'),
     topLink: document.querySelector('.top-link'),
   };
@@ -37,10 +54,6 @@
   let priority = {}; // seriesKey -> true（優先表示フラグ）
   let excluded = {}; // seriesKey -> true（除外フラグ）
   let baseSummary = ''; // クリア後などに戻す件数表示
-
-  function iconLabel(icon, text) {
-    return `${icon} ${text}`;
-  }
 
   function normalizeTheme(value) {
     return window.__KST_THEME__?.normalizeTheme(value)
@@ -70,20 +83,79 @@
     }
   }
 
-  async function initTheme() {
-    const data = await chrome.storage.local.get([THEME_KEY]);
-    const theme = normalizeTheme(data[THEME_KEY]);
-    els.themeToggle.value = theme;
-    setLocalTheme(theme);
-    applyThemeToDocument(theme);
-  }
-
   async function applyTheme(value) {
     const theme = normalizeTheme(value);
     setLocalTheme(theme);
     await chrome.storage.local.set({ [THEME_KEY]: theme });
     applyThemeToDocument(theme);
     els.themeToggle.value = theme;
+  }
+
+  async function applyLang(value) {
+    lang = i18n.normalizeLanguage(value);
+    els.langToggle.value = lang;
+    await chrome.storage.local.set({ [LANGUAGE_KEY]: lang });
+    i18n.applyI18n(document, lang);
+    render();
+  }
+
+  function selectValue(select, value, fallback) {
+    const exists = Array.from(select.options).some((option) => option.value === value);
+    select.value = exists ? value : fallback;
+  }
+
+  function currentSearchConditions() {
+    return {
+      search: els.search.value,
+      sort: els.sort.value,
+      filterMissing: els.filterMissing.checked,
+      filterPriority: els.filterPriority.checked,
+      filterStatus: els.filterStatus.value,
+      filterHideCompleted: els.filterHideCompleted.checked,
+      filterExcluded: els.filterExcluded.checked,
+      filterSale: els.filterSale.checked,
+    };
+  }
+
+  function applySearchConditions(value) {
+    if (!value || typeof value !== 'object') return;
+    els.search.value = typeof value.search === 'string' ? value.search : '';
+    selectValue(els.sort, value.sort, 'discount');
+    selectValue(els.filterStatus, value.filterStatus, 'all');
+    els.filterMissing.checked = value.filterMissing === true;
+    els.filterPriority.checked = value.filterPriority === true;
+    els.filterHideCompleted.checked = value.filterHideCompleted === true;
+    els.filterExcluded.checked = value.filterExcluded === true;
+    els.filterSale.checked = value.filterSale === true;
+  }
+
+  function saveSearchConditions() {
+    chrome.storage.local.set({ [SEARCH_CONDITIONS_KEY]: currentSearchConditions() });
+  }
+
+  function handleSearchConditionsChange() {
+    render();
+    saveSearchConditions();
+  }
+
+  function applyAutomationSettings(data) {
+    els.autoScanEnabled.checked = data[AUTO_SCAN_ENABLED_KEY] === true;
+    selectValue(els.autoScanInterval, String(data[AUTO_SCAN_INTERVAL_KEY] || 7), '7');
+    els.bgProbeEnabled.checked = data[BG_PROBE_ENABLED_KEY] === true;
+    selectValue(els.bgProbeInterval, String(data[BG_PROBE_INTERVAL_KEY] || 24), '24');
+  }
+
+  function reconcileAlarms() {
+    chrome.runtime.sendMessage({ type: 'kst:reconcileAlarms' }, () => {
+      if (chrome.runtime.lastError) {
+        console.warn('[KST] alarm reconcile message failed', chrome.runtime.lastError.message);
+      }
+    });
+  }
+
+  async function saveAutomationSetting(key, value) {
+    await chrome.storage.local.set({ [key]: value });
+    reconcileAlarms();
   }
 
   async function load() {
@@ -102,7 +174,7 @@
 
     if (!scan || (!Array.isArray(scan.series) && !Array.isArray(scan.items))) {
       series = [];
-      baseSummary = '未スキャンです。Amazon の Kindle 一覧ページでスキャンしてください。';
+      baseSummary = t('unscannerPrompt');
       els.summary.textContent = baseSummary;
       render();
       return;
@@ -115,7 +187,7 @@
     }));
 
     const total = scan.totalItems ?? (scan.items ? scan.items.length : 0);
-    baseSummary = `${total}冊 / ${series.length}シリーズ`;
+    baseSummary = t('scanSummaryOptions', total, series.length);
     els.summary.textContent = baseSummary;
     render();
   }
@@ -130,15 +202,13 @@
     if (q && !`${s.title} ${s.author || ''}`.includes(q)) return false;
     if (els.filterMissing.checked && s.missing.length === 0) return false;
     if (els.filterPriority.checked && !priority[s.key]) return false;
-    // 続刊状態フィルタ。手動完結は続刊照会の自動判定とは別概念なので、
-    // あり/なし/未照会のいずれにも該当させず除外する（すべて選択時のみ表示）。
-    const status = els.filterStatus.value;
-    if (status !== 'all') {
+    const filterStatus = els.filterStatus.value;
+    if (filterStatus !== 'all') {
       if (completed[s.key]) return false;
       const cached = catalogFor(s);
-      if (status === 'has-next' && cached?.status !== 'has-next') return false;
-      if (status === 'no-next' && cached?.status !== 'no-next') return false;
-      if (status === 'unchecked' && cached) return false;
+      if (filterStatus === 'has-next' && cached?.status !== 'has-next') return false;
+      if (filterStatus === 'no-next' && cached?.status !== 'no-next') return false;
+      if (filterStatus === 'unchecked' && cached) return false;
     }
     if (els.filterHideCompleted.checked && completed[s.key]) return false;
     if (els.filterExcluded.checked && excluded[s.key]) return false;
@@ -188,8 +258,8 @@
       const empty = document.createElement('div');
       empty.className = 'empty';
       empty.textContent = series.length
-        ? '条件に一致するシリーズがありません。'
-        : 'シリーズがありません。';
+        ? t('noFilteredSeries')
+        : t('noSeries');
       els.list.appendChild(empty);
       return;
     }
@@ -223,26 +293,25 @@
     const priorityBtn = document.createElement('button');
     priorityBtn.type = 'button';
     priorityBtn.className = 'secondary priority-btn';
-    priorityBtn.textContent = priority[s.key] ? iconLabel('☆', '優先解除') : iconLabel('★', '優先表示');
+    priorityBtn.textContent = priority[s.key] ? t('priorityOff') : t('priorityOn');
     priorityBtn.addEventListener('click', () => togglePriority(s));
     actions.appendChild(priorityBtn);
 
     const checkBtn = document.createElement('button');
     checkBtn.type = 'button';
     checkBtn.className = 'secondary';
-    checkBtn.textContent = cached ? iconLabel('↻', '再確認') : iconLabel('↻', '次巻を確認');
-    checkBtn.disabled = !!completed[s.key]; // 完結なら照会不要
+    checkBtn.textContent = cached ? t('recheckBtn') : t('checkNextBtn');
+    checkBtn.disabled = !!completed[s.key];
     checkBtn.addEventListener('click', () => checkNext(s, checkBtn));
     actions.appendChild(checkBtn);
 
     const completeBtn = document.createElement('button');
     completeBtn.type = 'button';
     completeBtn.className = 'secondary complete-btn';
-    completeBtn.textContent = completed[s.key] ? iconLabel('○', '完結解除') : iconLabel('✓', '完結にする');
-    // 続刊あり確定のシリーズは完結にできない（完結解除は常に許可）。
+    completeBtn.textContent = completed[s.key] ? t('completeOff') : t('completeOn');
     if (!completed[s.key] && cached?.status === 'has-next') {
       completeBtn.disabled = true;
-      completeBtn.title = '続刊があるため完結にできません';
+      completeBtn.title = t('cannotCompleteHasNext');
     }
     completeBtn.addEventListener('click', () => toggleCompleted(s));
     actions.appendChild(completeBtn);
@@ -250,7 +319,7 @@
     const excludeBtn = document.createElement('button');
     excludeBtn.type = 'button';
     excludeBtn.className = 'secondary exclude-btn';
-    excludeBtn.textContent = excluded[s.key] ? '除外解除' : '除外';
+    excludeBtn.textContent = excluded[s.key] ? t('excludeOff') : t('excludeOn');
     excludeBtn.addEventListener('click', () => toggleExcluded(s));
     actions.appendChild(excludeBtn);
 
@@ -258,7 +327,7 @@
     searchLink.href = s.searchUrl;
     searchLink.target = '_blank';
     searchLink.rel = 'noreferrer';
-    searchLink.textContent = iconLabel('↗', 'Amazonで探す');
+    searchLink.textContent = t('searchAmazonOptions');
     actions.appendChild(searchLink);
 
     row.appendChild(actions);
@@ -267,7 +336,7 @@
       const img = document.createElement('img');
       img.className = 'thumbnail';
       img.src = thumbnailUrl;
-      img.alt = offer?.title || cached?.latestTitle || `${s.title} 最新刊`;
+      img.alt = offer?.title || cached?.latestTitle || s.title;
       img.loading = 'lazy';
       row.appendChild(img);
     }
@@ -276,32 +345,31 @@
     meta.className = 'meta';
 
     const author = document.createElement('span');
-    author.textContent = s.author || '著者不明';
+    author.textContent = s.author || t('unknownAuthor');
     meta.appendChild(author);
 
     const owned = document.createElement('span');
     owned.className = 'badge';
-    owned.textContent = s.ranges.length ? `所有 ${card.formatRanges(s.ranges)}` : '巻数未推定';
+    owned.textContent = s.ranges.length ? t('ownedText', card.formatRanges(s.ranges)) : t('volumeUnknown');
     meta.appendChild(owned);
 
     if (s.missing.length) {
       const miss = document.createElement('span');
       miss.className = 'badge missing';
-      // 欠番も連番はレンジ表示にする（102,103,…,109 → 102-109）。
-      miss.textContent = `欠番 ${card.formatRanges(api.computeOwnedRanges(s.missing))}`;
+      miss.textContent = t('missingText', card.formatRanges(api.computeOwnedRanges(s.missing)));
       meta.appendChild(miss);
     }
 
     if (priority[s.key]) {
       const priorityBadge = document.createElement('span');
       priorityBadge.className = 'badge priority';
-      priorityBadge.textContent = '優先';
+      priorityBadge.textContent = t('priorityBadge');
       meta.appendChild(priorityBadge);
     }
 
     const statusBlock = document.createElement('span');
     statusBlock.className = 'next-result';
-    card.renderStatusBlock(statusBlock, cached, { completed: completed[s.key] });
+    card.renderStatusBlock(statusBlock, cached, { completed: completed[s.key], lang });
     meta.appendChild(statusBlock);
 
     row.appendChild(meta);
@@ -329,7 +397,6 @@
   }
 
   async function toggleCompleted(s) {
-    // 続刊あり確定のシリーズは完結にできない（解除は許可）。
     if (!completed[s.key] && catalogFor(s)?.status === 'has-next') return;
     if (completed[s.key]) {
       delete completed[s.key];
@@ -347,16 +414,15 @@
   async function checkNext(s, btn) {
     if (btn) {
       btn.disabled = true;
-      btn.textContent = iconLabel('↻', '照会中…');
+      btn.textContent = t('checkingIcon');
     }
     const result = await probeSeries(s);
     cache[s.key] = { ...result, checkedAt: Date.now() };
     await chrome.storage.local.set({ [CACHE_KEY]: cache });
     if (btn) {
       btn.disabled = false;
-      btn.textContent = iconLabel('↻', '再確認');
+      btn.textContent = t('recheckIcon');
     }
-    // 最新刊日付・サムネイルや続刊状態フィルタを反映するため再描画する。
     render();
   }
 
@@ -365,7 +431,6 @@
   }
 
   function simpleTargets() {
-    // 確定 has-next（未所持の次巻あり）だけ除外。stale（要再確認）・降格 no-next・未照会は含める。
     return currentList().filter(
       (s) => !completed[s.key] && !excluded[s.key] && !card.isConfirmedHasNext(catalogFor(s))
     );
@@ -383,7 +448,7 @@
     }
 
     bulkAbort = false;
-    triggerButton.textContent = iconLabel('×', '中止');
+    triggerButton.textContent = t('abortBtn');
     triggerButton.removeEventListener('click', triggerStart);
     triggerButton.addEventListener('click', abortBulk);
     els.checkVisible.disabled = triggerButton !== els.checkVisible;
@@ -393,7 +458,7 @@
     for (const s of targets) {
       if (bulkAbort) break;
       done += 1;
-      els.summary.textContent = `${label}中… ${done}/${targets.length}`;
+      els.summary.textContent = t('bulkProgress', label, done, targets.length);
       cache[s.key] = { ...(await probeSeries(s)), checkedAt: Date.now() };
       if (done % 20 === 0) await chrome.storage.local.set({ [CACHE_KEY]: cache });
       if (done % 5 === 0) render();
@@ -410,28 +475,28 @@
     els.checkSimple.disabled = false;
     render();
 
-    let msg = `${series.length}シリーズ（${done}件${label}）`;
-    if (bulkAbort) msg += ' ／ 中止しました';
+    let msg = t('bulkSummaryMsg', series.length, done, label);
+    if (bulkAbort) msg += t('bulkAborted');
     els.summary.textContent = msg;
   }
 
   function startFullBulk() {
     runBulkProbe(fullTargets(), {
-      label: '再確認',
+      label: t('recheckLabel'),
       triggerButton: els.checkVisible,
       triggerStart: startFullBulk,
-      triggerIdle: iconLabel('↻', '一括続刊再確認'),
-      emptyMessage: '再確認対象なし',
+      triggerIdle: t('checkAllBtn'),
+      emptyMessage: t('noRecheckTargetsOptions'),
     });
   }
 
   function startSimpleBulk() {
     runBulkProbe(simpleTargets(), {
-      label: '新刊チェック',
+      label: t('newCheckLabel'),
       triggerButton: els.checkSimple,
       triggerStart: startSimpleBulk,
-      triggerIdle: iconLabel('＋', '新刊チェック（簡易）'),
-      emptyMessage: '新刊チェック対象なし',
+      triggerIdle: t('newCheckBtn'),
+      emptyMessage: t('noNewCheck'),
     });
   }
 
@@ -445,33 +510,72 @@
   }
 
   async function clearCache() {
+    if (!confirm(t('confirmClearCache'))) return;
     cache = {};
     await chrome.storage.local.remove(CACHE_KEY);
     render();
-    els.summary.textContent = `照会キャッシュをクリアしました ／ ${baseSummary}`;
+    els.summary.textContent = t('cacheCleared', baseSummary);
   }
 
   async function clearScan() {
+    if (!confirm(t('confirmClearScan'))) return;
     await chrome.storage.local.remove([api.STORAGE_KEY, api.PROGRESS_KEY]);
     await load();
-    els.summary.textContent = `スキャン結果をクリアしました。再スキャンしてください。`;
+    els.summary.textContent = t('scanCleared');
   }
 
-  els.search.addEventListener('input', render);
-  els.sort.addEventListener('change', render);
-  els.filterMissing.addEventListener('change', render);
-  els.filterPriority.addEventListener('change', render);
-  els.filterStatus.addEventListener('change', render);
-  els.filterHideCompleted.addEventListener('change', render);
-  els.filterExcluded.addEventListener('change', render);
-  els.filterSale.addEventListener('change', render);
+  els.search.addEventListener('input', handleSearchConditionsChange);
+  els.sort.addEventListener('change', handleSearchConditionsChange);
+  els.filterMissing.addEventListener('change', handleSearchConditionsChange);
+  els.filterPriority.addEventListener('change', handleSearchConditionsChange);
+  els.filterStatus.addEventListener('change', handleSearchConditionsChange);
+  els.filterHideCompleted.addEventListener('change', handleSearchConditionsChange);
+  els.filterExcluded.addEventListener('change', handleSearchConditionsChange);
+  els.filterSale.addEventListener('change', handleSearchConditionsChange);
   els.checkVisible.addEventListener('click', startFullBulk);
   els.checkSimple.addEventListener('click', startSimpleBulk);
   els.clearCache.addEventListener('click', clearCache);
   els.clearScan.addEventListener('click', clearScan);
+  els.autoScanEnabled.addEventListener('change', () =>
+    saveAutomationSetting(AUTO_SCAN_ENABLED_KEY, els.autoScanEnabled.checked)
+  );
+  els.autoScanInterval.addEventListener('change', () =>
+    saveAutomationSetting(AUTO_SCAN_INTERVAL_KEY, Number(els.autoScanInterval.value))
+  );
+  els.bgProbeEnabled.addEventListener('change', () =>
+    saveAutomationSetting(BG_PROBE_ENABLED_KEY, els.bgProbeEnabled.checked)
+  );
+  els.bgProbeInterval.addEventListener('change', () =>
+    saveAutomationSetting(BG_PROBE_INTERVAL_KEY, Number(els.bgProbeInterval.value))
+  );
   els.themeToggle.addEventListener('change', () => applyTheme(els.themeToggle.value));
+  els.langToggle.addEventListener('change', (e) => applyLang(e.target.value));
   if (els.topLink) els.topLink.addEventListener('click', scrollToTop);
 
-  initTheme();
-  load();
+  async function init() {
+    const data = await chrome.storage.local.get([
+      THEME_KEY,
+      LANGUAGE_KEY,
+      SEARCH_CONDITIONS_KEY,
+      AUTO_SCAN_ENABLED_KEY,
+      AUTO_SCAN_INTERVAL_KEY,
+      BG_PROBE_ENABLED_KEY,
+      BG_PROBE_INTERVAL_KEY,
+    ]);
+
+    lang = i18n.normalizeLanguage(data[LANGUAGE_KEY]);
+    els.langToggle.value = lang;
+    i18n.applyI18n(document, lang);
+
+    const theme = normalizeTheme(data[THEME_KEY]);
+    els.themeToggle.value = theme;
+    setLocalTheme(theme);
+    applyThemeToDocument(theme);
+
+    applySearchConditions(data[SEARCH_CONDITIONS_KEY]);
+    applyAutomationSettings(data);
+    await load();
+  }
+
+  init();
 })();

@@ -57,11 +57,19 @@
 
   function renderStatusBlock(targetEl, cached, options) {
     const completed = !!(options && options.completed);
+    const cardLang = (options && options.lang) || 'ja';
+    const cardI18n = typeof window !== 'undefined' && window.__KST_I18N__;
+    function ct(key) {
+      var args = Array.prototype.slice.call(arguments, 1);
+      if (!cardI18n) return key;
+      return cardI18n.translate.apply(null, [cardLang, key].concat(args));
+    }
+
     targetEl.textContent = '';
     targetEl.classList.add('status-block');
 
     if (completed) {
-      appendBadge(targetEl, 'badge completed', '完結');
+      appendBadge(targetEl, 'badge completed', ct('completed'));
       return;
     }
 
@@ -72,29 +80,29 @@
 
     if (offer && offer.priceText) {
       appendSpace(targetEl);
-      appendBadge(targetEl, 'badge price', `価格 ${offer.priceText}`);
+      appendBadge(targetEl, 'badge price', ct('priceText', offer.priceText));
     }
 
     appendSpace(targetEl);
     if (!cached) {
-      appendBadge(targetEl, 'badge', '未照会');
+      appendBadge(targetEl, 'badge', ct('unchecked'));
     } else if (cached.stale) {
-      appendBadge(targetEl, 'badge recheck', '要再確認');
+      appendBadge(targetEl, 'badge recheck', ct('stale'));
     } else if (cached.status === 'has-next') {
-      appendBadge(targetEl, 'badge next', `続刊 ${cached.nextVolume}巻`);
+      appendBadge(targetEl, 'badge next', ct('hasNextVol', cached.nextVolume));
       if (cached.nextUrl) {
         appendSpace(targetEl);
         const link = document.createElement('a');
         link.href = cached.nextUrl;
         link.target = '_blank';
         link.rel = 'noreferrer';
-        link.textContent = cached.nextTitle || '購入ページ';
+        link.textContent = cached.nextTitle || ct('buyPage');
         targetEl.appendChild(link);
       }
     } else if (cached.status === 'no-next') {
-      appendBadge(targetEl, 'badge', '続刊なし');
+      appendBadge(targetEl, 'badge', ct('noNextVol'));
     } else {
-      appendBadge(targetEl, 'badge', '判定不能');
+      appendBadge(targetEl, 'badge', ct('unknown'));
     }
 
     const showLatest =
@@ -104,16 +112,43 @@
     if (showLatest) {
       appendSpace(targetEl);
       const date = cached.latestReleaseDate ? ` ${cached.latestReleaseDate}` : '';
-      appendBadge(targetEl, 'badge latest-date', `最新 ${cached.latestVolume}巻${date}`);
+      appendBadge(targetEl, 'badge latest-date', ct('latestVolInfo', cached.latestVolume, date));
+    }
+
+    if (
+      cached &&
+      cached.status === 'has-next' &&
+      !cached.stale &&
+      cached.completionCost !== null &&
+      cached.completionFoundCount > 0 &&
+      cached.completionExpectedSpan > 1
+    ) {
+      appendSpace(targetEl);
+      const isPartial = cached.completionFoundCount < cached.completionExpectedSpan;
+      let label;
+      if (isPartial) {
+        const estimated = Math.round(
+          (cached.completionCost / cached.completionFoundCount) * cached.completionExpectedSpan
+        );
+        label = ct('completionCostPartial', estimated);
+      } else {
+        label = ct('completionCostFull', cached.completionCost, cached.completionFoundCount);
+      }
+      appendBadge(targetEl, 'badge completion-cost', label);
     }
   }
 
-  async function probeSeriesWithUrl(catalog, group, searchUrl, seriesKey) {
-    const res = await fetch(searchUrl, { credentials: 'include' });
-    if (!res.ok) return { status: 'unknown' };
+  async function fetchSearchResults(catalog, url) {
+    const res = await fetch(url, { credentials: 'include' });
+    if (!res.ok) return [];
     const html = await res.text();
     const doc = new DOMParser().parseFromString(html, 'text/html');
-    const results = catalog.parseSearchResultsFromDoc(doc);
+    return catalog.parseSearchResultsFromDoc(doc);
+  }
+
+  async function probeSeriesWithUrl(catalog, group, searchUrl, seriesKey) {
+    const results = await fetchSearchResults(catalog, searchUrl);
+    if (results.length === 0) return { status: 'unknown' };
     return catalog.detectNextVolume(results, {
       seriesTitle: group.title,
       seriesKey,
@@ -125,7 +160,41 @@
   async function probeSeries(catalog, group) {
     if (!Number.isFinite(group.highestVolume)) return { status: 'unknown' };
     try {
-      const result = await probeSeriesWithUrl(catalog, group, group.searchUrl, group.seriesKey);
+      const primaryResults = await fetchSearchResults(catalog, group.searchUrl);
+      let result = catalog.detectNextVolume(primaryResults, {
+        seriesTitle: group.title,
+        seriesKey: group.seriesKey,
+        highestVolume: group.highestVolume,
+        ownedImprint: group.imprint,
+      });
+
+      if (result.status === 'has-next' && result.nextVolume > group.highestVolume + 3) {
+        try {
+          const extraResults = [];
+          for (let page = 2; page <= 5; page += 1) {
+            try {
+              const pageUrl = group.searchUrl + '&page=' + page;
+              const pageResults = await fetchSearchResults(catalog, pageUrl);
+              extraResults.push(...pageResults);
+            } catch (error) {
+              // Skip failed pagination pages and keep using available results.
+            }
+          }
+
+          const gapUrl = seriesSearchUrl(`${group.seriesKey || group.title} ${group.highestVolume + 1}`, '');
+          const gapResults = await fetchSearchResults(catalog, gapUrl);
+          const mergedResult = catalog.detectNextVolume(primaryResults.concat(extraResults).concat(gapResults), {
+            seriesTitle: group.title,
+            seriesKey: group.seriesKey,
+            highestVolume: group.highestVolume,
+            ownedImprint: group.imprint,
+          });
+          if (mergedResult.status === 'has-next') result = mergedResult;
+        } catch (error) {
+          // Keep the primary result when the supplemental search fails.
+        }
+      }
+
       if (result.status === 'has-next') return result;
 
       const closedDashKey = withClosingDashSeriesKey(group.seriesKey || group.title);

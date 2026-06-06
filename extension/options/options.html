@@ -3,64 +3,98 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Kindle シリーズ続刊トラッカー</title>
+    <title>Kindle Series Sale Tracker</title>
     <script src="../shared/theme-init.js"></script>
     <link rel="stylesheet" href="options.css" />
   </head>
   <body>
     <header id="pageTop" class="topbar">
-      <h1>Kindle シリーズ続刊トラッカー</h1>
+      <h1 data-i18n="pageTitle">Kindle シリーズ続刊トラッカー</h1>
       <div id="summary" class="summary">読み込み中…</div>
-      <label class="theme-control">テーマ
+      <label class="theme-control"><span data-i18n="themeLabel">テーマ</span>
         <select id="themeToggle">
-          <option value="auto">OSに合わせる</option>
-          <option value="light">ライト</option>
-          <option value="dark">ダーク</option>
+          <option value="auto" data-i18n="themeAuto">OSに合わせる</option>
+          <option value="light" data-i18n="themeLight">ライト</option>
+          <option value="dark" data-i18n="themeDark">ダーク</option>
+        </select>
+      </label>
+      <label class="theme-control"><span data-i18n="langLabel">言語</span>
+        <select id="langToggle">
+          <option value="ja">日本語</option>
+          <option value="en">English</option>
         </select>
       </label>
     </header>
 
     <section class="controls">
       <div class="toolbar-top">
-        <input id="search" type="search" placeholder="シリーズ名・著者で絞り込み" />
-        <label class="select-control">並び替え
+        <input id="search" type="search" data-i18n-placeholder="searchPlaceholder" placeholder="シリーズ名・著者で絞り込み" />
+        <label class="select-control"><span data-i18n="sortLabel">並び替え</span>
           <select id="sort">
-            <option value="count">所有冊数（多い順）</option>
-            <option value="volume">最高巻（大きい順）</option>
-            <option value="discount">割引率（高い順）</option>
-            <option value="title">タイトル（あいうえお順）</option>
+            <option value="discount" data-i18n="sortDiscount2">割引率（高い順）</option>
+            <option value="count" data-i18n="sortCount">所有冊数（多い順）</option>
+            <option value="volume" data-i18n="sortVolume">最高巻（大きい順）</option>
+            <option value="title" data-i18n="sortTitle">タイトル（あいうえお順）</option>
           </select>
         </label>
-        <button id="checkVisible" type="button" class="secondary">↻ 一括続刊再確認</button>
-        <button id="checkSimple" type="button" class="secondary">＋ 新刊チェック（簡易）</button>
+        <button id="checkVisible" type="button" class="secondary" data-i18n="checkAllBtn">↻ 一括続刊再確認</button>
+        <button id="checkSimple" type="button" class="secondary" data-i18n="newCheckBtn">＋ 新刊チェック（簡易）</button>
       </div>
 
       <div class="toolbar-filters">
-        <label class="chip"><input id="filterMissing" type="checkbox" /> 欠番あり</label>
-        <label class="chip"><input id="filterPriority" type="checkbox" /> 優先のみ</label>
-        <label class="select-control">続刊
+        <label class="chip"><input id="filterMissing" type="checkbox" /><span data-i18n="filterMissing"> 欠番あり</span></label>
+        <label class="chip"><input id="filterPriority" type="checkbox" /><span data-i18n="filterPriority"> 優先のみ</span></label>
+        <label class="select-control"><span data-i18n="filterStatusLabel">続刊</span>
           <select id="filterStatus">
-            <option value="all">すべて</option>
-            <option value="has-next">続刊あり</option>
-            <option value="no-next">続刊なし</option>
-            <option value="unchecked">未照会</option>
+            <option value="all" data-i18n="filterStatusAll">すべて</option>
+            <option value="has-next" data-i18n="filterStatusHasNext">続刊あり</option>
+            <option value="no-next" data-i18n="filterStatusNoNext">続刊なし</option>
+            <option value="unchecked" data-i18n="filterStatusUnchecked">未照会</option>
           </select>
         </label>
-        <label class="chip"><input id="filterHideCompleted" type="checkbox" /> 完結を隠す</label>
-        <label class="chip"><input id="filterExcluded" type="checkbox" /> 除外を隠す</label>
-        <label class="chip"><input id="filterSale" type="checkbox" /> セール中</label>
-        <button id="clearCache" type="button" class="secondary">× 照会キャッシュをクリア</button>
-        <button id="clearScan" type="button" class="secondary">× スキャン結果をクリア</button>
-        <span class="summary">※完結・優先フラグは保持されます</span>
+        <label class="chip"><input id="filterHideCompleted" type="checkbox" /><span data-i18n="filterHideCompleted"> 完結を隠す</span></label>
+        <label class="chip"><input id="filterExcluded" type="checkbox" /><span data-i18n="filterExcluded"> 除外を隠す</span></label>
+        <label class="chip"><input id="filterSale" type="checkbox" /><span data-i18n="filterSale"> セール中</span></label>
+      </div>
+    </section>
+
+    <section class="automation-settings" aria-labelledby="automationHeading">
+      <h2 id="automationHeading" data-i18n="automationHeading">自動化</h2>
+      <div class="toolbar-filters">
+        <label class="chip"><input id="autoScanEnabled" type="checkbox" /><span data-i18n="autoScanLabel"> Kindle一覧ページ訪問時に自動スキャン</span></label>
+        <label class="select-control"><span data-i18n="autoScanIntervalLabel">スキャン間隔</span>
+          <select id="autoScanInterval">
+            <option value="3" data-i18n="days3">3日</option>
+            <option value="7" data-i18n="days7">7日</option>
+            <option value="14" data-i18n="days14">14日</option>
+          </select>
+        </label>
+        <label class="chip"><input id="bgProbeEnabled" type="checkbox" /><span data-i18n="bgProbeLabel"> バックグラウンドで続刊・セールを確認</span></label>
+        <label class="select-control"><span data-i18n="bgProbeIntervalLabel">照会間隔</span>
+          <select id="bgProbeInterval">
+            <option value="12" data-i18n="hours12">12時間</option>
+            <option value="24" data-i18n="hours24">24時間</option>
+            <option value="48" data-i18n="hours48">48時間</option>
+          </select>
+        </label>
       </div>
     </section>
 
     <main id="list" class="list"></main>
-    <a class="top-link" href="#pageTop">↑ トップへ</a>
+    <section class="danger-zone" aria-labelledby="dangerHeading">
+      <h2 id="dangerHeading" data-i18n="dangerHeading">データ削除</h2>
+      <div class="danger-zone-actions">
+        <button id="clearCache" type="button" class="danger" data-i18n="clearCache">× 照会キャッシュをクリア</button>
+        <button id="clearScan" type="button" class="danger" data-i18n="clearScan">× スキャン結果をクリア</button>
+      </div>
+      <span class="summary" data-i18n="clearNote">※完結・優先フラグは保持されます</span>
+    </section>
+    <a class="top-link" href="#pageTop" data-i18n="topLink">↑ トップへ</a>
 
     <script src="../shared/kindle-library.js"></script>
     <script src="../shared/catalog-probe.js"></script>
     <script src="../shared/series-card.js"></script>
+    <script src="../shared/i18n.js"></script>
     <script src="options.js"></script>
   </body>
 </html>

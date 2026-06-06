@@ -1,18 +1,19 @@
 # Kindle Series Sale Tracker
 
-Amazon.co.jp の Kindle 蔵書一覧からシリーズ候補を抽出し、続刊確認用のリストを作る Chrome 拡張プロトタイプです。
+Amazon.co.jp の Kindle 蔵書一覧からシリーズ候補を抽出し、続刊確認用のリストを作る Chrome / Firefox 拡張プロトタイプです。
 
 ## できること
 
 - Amazon.co.jp のデジタルコンソールから購入済み Kindle 本の一覧を取得
 - タイトルと著者からシリーズ候補と所有巻数を簡易推定
 - 次巻候補を探す Amazon 検索リンクを表示
+- Amazon 検索結果から取れた場合だけ、続刊候補の価格・割引率・発売日・表紙を表示
 - 取得結果を CSV / JSON でエクスポート
 
 ## まだできないこと
 
 - 未購入巻のASIN確定
-- 価格、ポイント、セール情報の自動取得
+- ポイント情報の自動取得
 - Kindle Unlimited、Audible、紙本の横断管理
 
 ## 使い方
@@ -31,6 +32,9 @@ Firefox は `.\scripts\build-dev.ps1 -Target all` を実行し、`about:debuggin
 
 ```powershell
 node .\verify-kindle-library.mjs
+node .\verify-catalog-probe.mjs
+node .\verify-series-card.mjs
+.\scripts\build-dev.ps1 -Target all
 .\scripts\package-release.ps1 -Target all
 ```
 

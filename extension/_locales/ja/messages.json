@@ -1,0 +1,14 @@
+{
+  "extName": {
+    "message": "Kindle シリーズ続刊トラッカー",
+    "description": "Extension name"
+  },
+  "extDescription": {
+    "message": "Amazon.co.jp のKindle蔵書からシリーズ候補を抽出し、続刊確認用リストを作ります。",
+    "description": "Extension description"
+  },
+  "actionTitle": {
+    "message": "Kindle シリーズ続刊トラッカー",
+    "description": "Sidebar / action title"
+  }
+}
