@@ -9,6 +9,7 @@
   const BG_PROBE_INTERVAL_KEY = 'kstBgProbeIntervalH';
   const BG_PROBE_QUEUE_KEY = 'kstBgProbeQueue';
   const BG_PROBE_LAST_RUN_KEY = 'kstBgProbeLastRunAt';
+  const BG_PROBE_ENABLED_AT_KEY = 'kstBgProbeEnabledAt';
   const BG_BADGE_COUNT_KEY = 'kstBgBadgeCount';
   const ALARM_NAME = 'kstBgProbe';
   const CHUNK_SIZE = 8;
@@ -42,6 +43,23 @@
     return Number.isFinite(n) && n > 0 ? n : DEFAULT_INTERVAL_H;
   }
 
+  function getAlarm(name) {
+    if (!chrome.alarms?.get) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      try {
+        chrome.alarms.get(name, (alarm) => {
+          if (chrome.runtime.lastError) {
+            resolve(null);
+            return;
+          }
+          resolve(alarm || null);
+        });
+      } catch (_) {
+        resolve(null);
+      }
+    });
+  }
+
   async function setBadge(count) {
     if (!chrome.action?.setBadgeText) return;
     const badgeCount = Number(count) || 0;
@@ -56,10 +74,41 @@
     const data = await storageGet([BG_PROBE_ENABLED_KEY, BG_PROBE_INTERVAL_KEY]);
     if (data[BG_PROBE_ENABLED_KEY]) {
       const intervalH = normalizeIntervalH(data[BG_PROBE_INTERVAL_KEY]);
-      await chrome.alarms.create(ALARM_NAME, { periodInMinutes: intervalH * 60 });
+      const periodInMinutes = intervalH * 60;
+      const alarm = await getAlarm(ALARM_NAME);
+      if (alarm?.periodInMinutes === periodInMinutes) return;
+      await chrome.alarms.create(ALARM_NAME, { periodInMinutes });
     } else {
       await chrome.alarms.clear(ALARM_NAME);
     }
+  }
+
+  async function ensureBgProbeEnabledAt() {
+    const data = await storageGet([BG_PROBE_ENABLED_KEY, BG_PROBE_ENABLED_AT_KEY]);
+    if (data[BG_PROBE_ENABLED_KEY] !== true || Number(data[BG_PROBE_ENABLED_AT_KEY]) > 0) {
+      return;
+    }
+    await storageSet({ [BG_PROBE_ENABLED_AT_KEY]: Date.now() });
+  }
+
+  async function maybeRunDueBgProbe() {
+    const data = await storageGet([
+      BG_PROBE_ENABLED_KEY,
+      BG_PROBE_LAST_RUN_KEY,
+      BG_PROBE_ENABLED_AT_KEY,
+      BG_PROBE_INTERVAL_KEY,
+    ]);
+    if (data[BG_PROBE_ENABLED_KEY] !== true) return;
+    const base = Number(data[BG_PROBE_LAST_RUN_KEY]) || Number(data[BG_PROBE_ENABLED_AT_KEY]) || 0;
+    if (base <= 0) return;
+    const intervalMs = normalizeIntervalH(data[BG_PROBE_INTERVAL_KEY]) * 60 * 60000;
+    if (Date.now() >= base + intervalMs) await runBackgroundProbe();
+  }
+
+  async function handleWake() {
+    await reconcileAlarms();
+    await ensureBgProbeEnabledAt();
+    await maybeRunDueBgProbe();
   }
 
   function eligibleSeries(scan, completed, excluded) {
@@ -236,13 +285,13 @@
 
   if (chrome.runtime?.onInstalled) {
     chrome.runtime.onInstalled.addListener(() => {
-      reconcileAlarms().catch((e) => console.warn('[KST] alarm reconcile failed', e));
+      handleWake().catch((e) => console.warn('[KST] background wake failed', e));
     });
   }
 
   if (chrome.runtime?.onStartup) {
     chrome.runtime.onStartup.addListener(() => {
-      reconcileAlarms().catch((e) => console.warn('[KST] alarm reconcile failed', e));
+      handleWake().catch((e) => console.warn('[KST] background wake failed', e));
     });
   }
 

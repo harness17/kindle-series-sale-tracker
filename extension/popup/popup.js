@@ -15,7 +15,9 @@
   const AUTO_SCAN_LAST_ATTEMPT_KEY = 'kstAutoScanLastAttempt';
   const AUTO_SCAN_ENABLED_AT_KEY = 'kstAutoScanEnabledAt';
   const BG_PROBE_ENABLED_KEY = 'kstBgProbeEnabled';
+  const BG_PROBE_INTERVAL_KEY = 'kstBgProbeIntervalH';
   const BG_PROBE_LAST_RUN_KEY = 'kstBgProbeLastRunAt';
+  const BG_PROBE_ENABLED_AT_KEY = 'kstBgProbeEnabledAt';
   const THEME_KEY = 'kstTheme';
   const LANGUAGE_KEY = i18n.LANGUAGE_KEY;
   const REQUEST_DELAY_MS = 350;
@@ -86,6 +88,11 @@
     return Number.isFinite(n) && n > 0 ? n : 7;
   }
 
+  function normalizeIntervalH(value) {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? n : 24;
+  }
+
   function provisionalDate(value) {
     return formatStatusDate(value) + ' ' + t('statusProvisional');
   }
@@ -100,6 +107,16 @@
     return enabledAt;
   }
 
+  async function ensureBgProbeEnabledAt(data) {
+    if (data[BG_PROBE_ENABLED_KEY] !== true || Number(data[BG_PROBE_ENABLED_AT_KEY]) > 0) {
+      return data[BG_PROBE_ENABLED_AT_KEY];
+    }
+    const enabledAt = Date.now();
+    data[BG_PROBE_ENABLED_AT_KEY] = enabledAt;
+    await chrome.storage.local.set({ [BG_PROBE_ENABLED_AT_KEY]: enabledAt });
+    return enabledAt;
+  }
+
   function autoScanStatusText(data, scan) {
     if (data[AUTO_SCAN_ENABLED_KEY] !== true) return t('statusDisabled');
     const lastAttempt = Number(data[AUTO_SCAN_LAST_ATTEMPT_KEY]) || 0;
@@ -108,6 +125,18 @@
     const base = lastAttempt || scannedAt || enabledAt;
     const provisional = !lastAttempt && !scannedAt;
     const intervalMs = normalizeIntervalD(data[AUTO_SCAN_INTERVAL_KEY]) * 86400000;
+    const lastText = provisional ? provisionalDate(base) : formatStatusDate(base);
+    const nextText = provisional ? provisionalDate(base + intervalMs) : formatStatusDate(base + intervalMs);
+    return t('statusLastRun', lastText) + ' / ' + t('statusNextRun', nextText);
+  }
+
+  function bgProbeStatusText(data) {
+    if (data[BG_PROBE_ENABLED_KEY] !== true) return t('statusDisabled');
+    const lastRunAt = Number(data[BG_PROBE_LAST_RUN_KEY]) || 0;
+    const enabledAt = Number(data[BG_PROBE_ENABLED_AT_KEY]) || 0;
+    const base = lastRunAt || enabledAt;
+    const provisional = !lastRunAt;
+    const intervalMs = normalizeIntervalH(data[BG_PROBE_INTERVAL_KEY]) * 60 * 60000;
     const lastText = provisional ? provisionalDate(base) : formatStatusDate(base);
     const nextText = provisional ? provisionalDate(base + intervalMs) : formatStatusDate(base + intervalMs);
     return t('statusLastRun', lastText) + ' / ' + t('statusNextRun', nextText);
@@ -128,13 +157,16 @@
       AUTO_SCAN_LAST_ATTEMPT_KEY,
       AUTO_SCAN_ENABLED_AT_KEY,
       BG_PROBE_ENABLED_KEY,
+      BG_PROBE_INTERVAL_KEY,
       BG_PROBE_LAST_RUN_KEY,
+      BG_PROBE_ENABLED_AT_KEY,
     ]);
     await ensureAutoScanEnabledAt(data);
+    await ensureBgProbeEnabledAt(data);
     const autoText = autoScanStatusText(data, scan);
     const breakdown = snapshotBreakdown(scan);
     const bgText = data[BG_PROBE_ENABLED_KEY] === true
-      ? t('statusLastRun', formatStatusDate(data[BG_PROBE_LAST_RUN_KEY])) + ' / ' + t('statusBreakdown', breakdown.next, breakdown.discount)
+      ? bgProbeStatusText(data) + ' / ' + t('statusBreakdown', breakdown.next, breakdown.discount)
       : t('statusDisabled');
     const automationText = t('popupAutomationStatus', autoText, bgText);
     if (scan) {

@@ -18,7 +18,7 @@
   const BG_PROBE_INTERVAL_KEY = 'kstBgProbeIntervalH';
   const BG_PROBE_QUEUE_KEY = 'kstBgProbeQueue';
   const BG_PROBE_LAST_RUN_KEY = 'kstBgProbeLastRunAt';
-  const ALARM_NAME = 'kstBgProbe';
+  const BG_PROBE_ENABLED_AT_KEY = 'kstBgProbeEnabledAt';
   const THEME_KEY = 'kstTheme';
   const LANGUAGE_KEY = i18n.LANGUAGE_KEY;
   const REQUEST_DELAY_MS = 350; // 一括照会の間隔（throttle/403 回避）
@@ -168,6 +168,11 @@
     return Number.isFinite(n) && n > 0 ? n : 7;
   }
 
+  function normalizeIntervalH(value) {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? n : 24;
+  }
+
   function provisionalDate(value) {
     return formatStatusDate(value) + ' ' + t('statusProvisional');
   }
@@ -182,6 +187,16 @@
     return enabledAt;
   }
 
+  async function ensureBgProbeEnabledAt(data) {
+    if (data[BG_PROBE_ENABLED_KEY] !== true || Number(data[BG_PROBE_ENABLED_AT_KEY]) > 0) {
+      return data[BG_PROBE_ENABLED_AT_KEY];
+    }
+    const enabledAt = Date.now();
+    data[BG_PROBE_ENABLED_AT_KEY] = enabledAt;
+    await chrome.storage.local.set({ [BG_PROBE_ENABLED_AT_KEY]: enabledAt });
+    return enabledAt;
+  }
+
   function autoScanStatusParts(data, scan) {
     if (data[AUTO_SCAN_ENABLED_KEY] !== true) return [t('statusDisabled')];
     const lastAttempt = Number(data[AUTO_SCAN_LAST_ATTEMPT_KEY]) || 0;
@@ -190,6 +205,18 @@
     const base = lastAttempt || scannedAt || enabledAt;
     const provisional = !lastAttempt && !scannedAt;
     const intervalMs = normalizeIntervalD(data[AUTO_SCAN_INTERVAL_KEY]) * 86400000;
+    const lastText = provisional ? provisionalDate(base) : formatStatusDate(base);
+    const nextText = provisional ? provisionalDate(base + intervalMs) : formatStatusDate(base + intervalMs);
+    return [t('statusEnabled'), t('statusLastRun', lastText), t('statusNextRun', nextText)];
+  }
+
+  function bgProbeStatusParts(data) {
+    if (data[BG_PROBE_ENABLED_KEY] !== true) return [t('statusDisabled')];
+    const lastRunAt = Number(data[BG_PROBE_LAST_RUN_KEY]) || 0;
+    const enabledAt = Number(data[BG_PROBE_ENABLED_AT_KEY]) || 0;
+    const base = lastRunAt || enabledAt;
+    const provisional = !lastRunAt;
+    const intervalMs = normalizeIntervalH(data[BG_PROBE_INTERVAL_KEY]) * 60 * 60000;
     const lastText = provisional ? provisionalDate(base) : formatStatusDate(base);
     const nextText = provisional ? provisionalDate(base + intervalMs) : formatStatusDate(base + intervalMs);
     return [t('statusEnabled'), t('statusLastRun', lastText), t('statusNextRun', nextText)];
@@ -218,23 +245,6 @@
     }, { next: 0, discount: 0 });
   }
 
-  function getBgProbeAlarm() {
-    if (!chrome.alarms?.get) return Promise.resolve(null);
-    return new Promise((resolve) => {
-      try {
-        chrome.alarms.get(ALARM_NAME, (alarm) => {
-          if (chrome.runtime.lastError) {
-            resolve(null);
-            return;
-          }
-          resolve(alarm || null);
-        });
-      } catch (_) {
-        resolve(null);
-      }
-    });
-  }
-
   async function refreshAutomationStatus() {
     const data = await chrome.storage.local.get([
       api.STORAGE_KEY,
@@ -246,8 +256,10 @@
       AUTO_SCAN_LAST_ATTEMPT_KEY,
       AUTO_SCAN_ENABLED_AT_KEY,
       BG_PROBE_ENABLED_KEY,
+      BG_PROBE_INTERVAL_KEY,
       BG_PROBE_QUEUE_KEY,
       BG_PROBE_LAST_RUN_KEY,
+      BG_PROBE_ENABLED_AT_KEY,
     ]);
     const scan = data[api.STORAGE_KEY] || null;
     const completedMap = data[COMPLETED_KEY] || {};
@@ -257,15 +269,8 @@
     await ensureAutoScanEnabledAt(data);
     els.autoScanStatus.textContent = autoScanStatusParts(data, scan).join(' / ');
 
-    const bgParts = data[BG_PROBE_ENABLED_KEY] === true
-      ? [t('statusEnabled'), t('statusLastRun', formatStatusDate(data[BG_PROBE_LAST_RUN_KEY]))]
-      : [t('statusDisabled'), t('statusLastRun', t('statusNeverRun'))];
-    if (data[BG_PROBE_ENABLED_KEY] === true) {
-      const alarm = await getBgProbeAlarm();
-      if (Number.isFinite(alarm?.scheduledTime)) {
-        bgParts.push(t('statusNextRun', formatStatusDate(alarm.scheduledTime)));
-      }
-    }
+    await ensureBgProbeEnabledAt(data);
+    const bgParts = bgProbeStatusParts(data);
     bgParts.push(t('statusProgress', bgProgress(data[BG_PROBE_QUEUE_KEY] || {}, eligible.length), eligible.length));
     bgParts.push(t('statusBreakdown', breakdown.next, breakdown.discount));
     els.bgProbeStatus.textContent = bgParts.join(' / ');
@@ -285,6 +290,7 @@
   async function saveAutomationSetting(key, value) {
     const payload = { [key]: value };
     if (key === AUTO_SCAN_ENABLED_KEY && value === true) payload[AUTO_SCAN_ENABLED_AT_KEY] = Date.now();
+    if (key === BG_PROBE_ENABLED_KEY && value === true) payload[BG_PROBE_ENABLED_AT_KEY] = Date.now();
     await chrome.storage.local.set(payload);
     await reconcileAlarms();
     await refreshAutomationStatus();
@@ -694,6 +700,7 @@
       AUTO_SCAN_ENABLED_AT_KEY,
       BG_PROBE_ENABLED_KEY,
       BG_PROBE_INTERVAL_KEY,
+      BG_PROBE_ENABLED_AT_KEY,
     ]);
 
     lang = i18n.normalizeLanguage(data[LANGUAGE_KEY]);
@@ -708,6 +715,7 @@
     applySearchConditions(data[SEARCH_CONDITIONS_KEY]);
     applyAutomationSettings(data);
     await ensureAutoScanEnabledAt(data);
+    await ensureBgProbeEnabledAt(data);
     await load();
     await refreshAutomationStatus();
   }
@@ -728,6 +736,7 @@
         BG_PROBE_INTERVAL_KEY,
         BG_PROBE_QUEUE_KEY,
         BG_PROBE_LAST_RUN_KEY,
+        BG_PROBE_ENABLED_AT_KEY,
       ];
       if (watched.some((key) => changes[key])) refreshAutomationStatus();
     });
