@@ -43,6 +43,19 @@
       </section>
 
       <p id="status" class="status" role="status"></p>
+      <details class="automation-status">
+        <summary id="statusHeading" data-i18n="statusHeading">実行状況</summary>
+        <dl>
+          <div>
+            <dt data-i18n="autoScanStatusLabel">自動スキャン</dt>
+            <dd id="popupAutoScanStatus">未実行</dd>
+          </div>
+          <div>
+            <dt data-i18n="bgProbeStatusLabel">BGプローブ</dt>
+            <dd id="popupBgProbeStatus">未実行</dd>
+          </div>
+        </dl>
+      </details>
 
       <section>
         <h2 data-i18n="seriesCandidates">シリーズ候補</h2>

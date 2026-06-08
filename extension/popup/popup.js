@@ -31,6 +31,8 @@
 
   const summary = document.getElementById('summary');
   const status = document.getElementById('status');
+  const popupAutoScanStatus = document.getElementById('popupAutoScanStatus');
+  const popupBgProbeStatus = document.getElementById('popupBgProbeStatus');
   const seriesList = document.getElementById('seriesList');
   const popupSort = document.getElementById('popupSort');
   const checkVisibleBtn = document.getElementById('checkVisible');
@@ -163,17 +165,12 @@
     ]);
     await ensureAutoScanEnabledAt(data);
     await ensureBgProbeEnabledAt(data);
-    const autoText = autoScanStatusText(data, scan);
+    popupAutoScanStatus.textContent = autoScanStatusText(data, scan);
     const breakdown = snapshotBreakdown(scan);
-    const bgText = data[BG_PROBE_ENABLED_KEY] === true
+    popupBgProbeStatus.textContent = data[BG_PROBE_ENABLED_KEY] === true
       ? bgProbeStatusText(data) + ' / ' + t('statusBreakdown', breakdown.next, breakdown.discount)
       : t('statusDisabled');
-    const automationText = t('popupAutomationStatus', autoText, bgText);
-    if (scan) {
-      setStatus(t('lastScan', formatScannedAt(scan.scannedAt)) + ' / ' + automationText);
-    } else {
-      setStatus(automationText);
-    }
+    setStatus(scan ? t('lastScan', formatScannedAt(scan.scannedAt)) : '');
   }
 
   function downloadText(filename, mimeType, text) {

@@ -177,6 +177,38 @@ button:hover {
   font-size: 12px;
 }
 
+.automation-status {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.automation-status summary {
+  cursor: pointer;
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.automation-status dl {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+}
+
+.automation-status dl div {
+  display: grid;
+  grid-template-columns: minmax(92px, max-content) 1fr;
+  gap: 8px;
+}
+
+.automation-status dt {
+  color: var(--fg);
+}
+
+.automation-status dd {
+  margin: 0;
+}
+
 .series-list {
   display: grid;
   gap: 8px;
