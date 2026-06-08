@@ -10,6 +10,10 @@
   const PRIORITY_KEY = 'kstPrioritySeries';
   const EXCLUDED_KEY = 'kstExcludedSeries';
   const BG_BADGE_COUNT_KEY = 'kstBgBadgeCount';
+  const AUTO_SCAN_ENABLED_KEY = 'kstAutoScanEnabled';
+  const AUTO_SCAN_LAST_ATTEMPT_KEY = 'kstAutoScanLastAttempt';
+  const BG_PROBE_ENABLED_KEY = 'kstBgProbeEnabled';
+  const BG_PROBE_LAST_RUN_KEY = 'kstBgProbeLastRunAt';
   const THEME_KEY = 'kstTheme';
   const LANGUAGE_KEY = i18n.LANGUAGE_KEY;
   const REQUEST_DELAY_MS = 350;
@@ -69,6 +73,41 @@
     return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()} ${String(
       date.getHours()
     ).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  }
+
+  function formatStatusDate(value) {
+    return formatScannedAt(value) || t('statusNeverRun');
+  }
+
+  function snapshotBreakdown(scan) {
+    return (Array.isArray(scan?.series) ? scan.series : []).reduce((acc, group) => {
+      if (card.isConfirmedHasNext(group.catalog)) acc.next += 1;
+      if (card.discountValue(group.catalog) > 0) acc.discount += 1;
+      return acc;
+    }, { next: 0, discount: 0 });
+  }
+
+  async function setPopupStatus(scan) {
+    const data = await chrome.storage.local.get([
+      AUTO_SCAN_ENABLED_KEY,
+      AUTO_SCAN_LAST_ATTEMPT_KEY,
+      BG_PROBE_ENABLED_KEY,
+      BG_PROBE_LAST_RUN_KEY,
+    ]);
+    const autoLastRun = Number(data[AUTO_SCAN_LAST_ATTEMPT_KEY]) || Number(scan?.scannedAt) || 0;
+    const autoText = data[AUTO_SCAN_ENABLED_KEY] === true
+      ? t('statusLastRun', formatStatusDate(autoLastRun))
+      : t('statusDisabled');
+    const breakdown = snapshotBreakdown(scan);
+    const bgText = data[BG_PROBE_ENABLED_KEY] === true
+      ? t('statusLastRun', formatStatusDate(data[BG_PROBE_LAST_RUN_KEY])) + ' / ' + t('statusBreakdown', breakdown.next, breakdown.discount)
+      : t('statusDisabled');
+    const automationText = t('popupAutomationStatus', autoText, bgText);
+    if (scan) {
+      setStatus(t('lastScan', formatScannedAt(scan.scannedAt)) + ' / ' + automationText);
+    } else {
+      setStatus(automationText);
+    }
   }
 
   function downloadText(filename, mimeType, text) {
@@ -297,6 +336,7 @@
   async function refresh() {
     const scan = await getLastScan();
     render(scan);
+    await setPopupStatus(scan);
     const hasItems = Array.isArray(scan?.items) && scan.items.length > 0;
     const simpleBtn = document.getElementById('scanSimple');
     simpleBtn.disabled = !hasItems;
@@ -367,6 +407,7 @@
     await chrome.storage.local.set({ [LANGUAGE_KEY]: lang });
     i18n.applyI18n(document, lang);
     render(currentScan);
+    await setPopupStatus(currentScan);
   }
 
   document.getElementById('openLibrary').addEventListener('click', () => {

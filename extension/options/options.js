@@ -12,8 +12,12 @@
   const SEARCH_CONDITIONS_KEY = 'kstOptionsSearchConditions';
   const AUTO_SCAN_ENABLED_KEY = 'kstAutoScanEnabled';
   const AUTO_SCAN_INTERVAL_KEY = 'kstAutoScanIntervalD';
+  const AUTO_SCAN_LAST_ATTEMPT_KEY = 'kstAutoScanLastAttempt';
   const BG_PROBE_ENABLED_KEY = 'kstBgProbeEnabled';
   const BG_PROBE_INTERVAL_KEY = 'kstBgProbeIntervalH';
+  const BG_PROBE_QUEUE_KEY = 'kstBgProbeQueue';
+  const BG_PROBE_LAST_RUN_KEY = 'kstBgProbeLastRunAt';
+  const ALARM_NAME = 'kstBgProbe';
   const THEME_KEY = 'kstTheme';
   const LANGUAGE_KEY = i18n.LANGUAGE_KEY;
   const REQUEST_DELAY_MS = 350; // 一括照会の間隔（throttle/403 回避）
@@ -42,6 +46,8 @@
     autoScanInterval: document.getElementById('autoScanInterval'),
     bgProbeEnabled: document.getElementById('bgProbeEnabled'),
     bgProbeInterval: document.getElementById('bgProbeInterval'),
+    autoScanStatus: document.getElementById('autoScanStatus'),
+    bgProbeStatus: document.getElementById('bgProbeStatus'),
     themeToggle: document.getElementById('themeToggle'),
     langToggle: document.getElementById('langToggle'),
     list: document.getElementById('list'),
@@ -97,6 +103,7 @@
     await chrome.storage.local.set({ [LANGUAGE_KEY]: lang });
     i18n.applyI18n(document, lang);
     render();
+    refreshAutomationStatus();
   }
 
   function selectValue(select, value, fallback) {
@@ -145,17 +152,108 @@
     selectValue(els.bgProbeInterval, String(data[BG_PROBE_INTERVAL_KEY] || 24), '24');
   }
 
-  function reconcileAlarms() {
-    chrome.runtime.sendMessage({ type: 'kst:reconcileAlarms' }, () => {
-      if (chrome.runtime.lastError) {
-        console.warn('[KST] alarm reconcile message failed', chrome.runtime.lastError.message);
+  function formatStatusDate(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) return t('statusNeverRun');
+    const date = new Date(n);
+    if (Number.isNaN(date.getTime())) return t('statusNeverRun');
+    return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()} ${String(
+      date.getHours()
+    ).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  }
+
+  function eligibleSeries(scan, completedMap, excludedMap) {
+    return (Array.isArray(scan?.series) ? scan.series : [])
+      .filter((s) => !completedMap[s.key] && !excludedMap[s.key] && Number.isFinite(s.highestVolume))
+      .sort((a, b) => String(a.key || '').localeCompare(String(b.key || ''), 'ja'));
+  }
+
+  function bgProgress(queue, total) {
+    if (total <= 0) return 0;
+    const cursor = Number.isFinite(queue?.cursor) ? queue.cursor : 0;
+    const lastCycleAt = Number.isFinite(queue?.lastCycleAt) ? queue.lastCycleAt : 0;
+    if (cursor === 0 && lastCycleAt > 0) return total;
+    return Math.min(Math.max(cursor, 0), total);
+  }
+
+  function snapshotBreakdown(eligible, catalogCache) {
+    return eligible.reduce((acc, s) => {
+      const reconciled = card.reconcileCatalog(catalogCache[s.key], s.highestVolume);
+      if (card.isConfirmedHasNext(reconciled)) acc.next += 1;
+      if (card.discountValue(reconciled) > 0) acc.discount += 1;
+      return acc;
+    }, { next: 0, discount: 0 });
+  }
+
+  function getBgProbeAlarm() {
+    if (!chrome.alarms?.get) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      try {
+        chrome.alarms.get(ALARM_NAME, (alarm) => {
+          if (chrome.runtime.lastError) {
+            resolve(null);
+            return;
+          }
+          resolve(alarm || null);
+        });
+      } catch (_) {
+        resolve(null);
       }
+    });
+  }
+
+  async function refreshAutomationStatus() {
+    const data = await chrome.storage.local.get([
+      api.STORAGE_KEY,
+      CACHE_KEY,
+      COMPLETED_KEY,
+      EXCLUDED_KEY,
+      AUTO_SCAN_ENABLED_KEY,
+      AUTO_SCAN_LAST_ATTEMPT_KEY,
+      BG_PROBE_ENABLED_KEY,
+      BG_PROBE_QUEUE_KEY,
+      BG_PROBE_LAST_RUN_KEY,
+    ]);
+    const scan = data[api.STORAGE_KEY] || null;
+    const completedMap = data[COMPLETED_KEY] || {};
+    const excludedMap = data[EXCLUDED_KEY] || {};
+    const eligible = eligibleSeries(scan, completedMap, excludedMap);
+    const breakdown = snapshotBreakdown(eligible, data[CACHE_KEY] || {});
+    const autoLastRun = Number(data[AUTO_SCAN_LAST_ATTEMPT_KEY]) || Number(scan?.scannedAt) || 0;
+    const autoParts = data[AUTO_SCAN_ENABLED_KEY] === true
+      ? [t('statusEnabled'), t('statusLastRun', formatStatusDate(autoLastRun))]
+      : [t('statusDisabled'), t('statusLastRun', t('statusNeverRun'))];
+    els.autoScanStatus.textContent = autoParts.join(' / ');
+
+    const bgParts = data[BG_PROBE_ENABLED_KEY] === true
+      ? [t('statusEnabled'), t('statusLastRun', formatStatusDate(data[BG_PROBE_LAST_RUN_KEY]))]
+      : [t('statusDisabled'), t('statusLastRun', t('statusNeverRun'))];
+    if (data[BG_PROBE_ENABLED_KEY] === true) {
+      const alarm = await getBgProbeAlarm();
+      if (Number.isFinite(alarm?.scheduledTime)) {
+        bgParts.push(t('statusNextRun', formatStatusDate(alarm.scheduledTime)));
+      }
+    }
+    bgParts.push(t('statusProgress', bgProgress(data[BG_PROBE_QUEUE_KEY] || {}, eligible.length), eligible.length));
+    bgParts.push(t('statusBreakdown', breakdown.next, breakdown.discount));
+    els.bgProbeStatus.textContent = bgParts.join(' / ');
+  }
+
+  function reconcileAlarms() {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({ type: 'kst:reconcileAlarms' }, () => {
+        if (chrome.runtime.lastError) {
+          console.warn('[KST] alarm reconcile message failed', chrome.runtime.lastError.message);
+        }
+        resolve();
+      });
     });
   }
 
   async function saveAutomationSetting(key, value) {
     await chrome.storage.local.set({ [key]: value });
-    reconcileAlarms();
+    await reconcileAlarms();
+    await refreshAutomationStatus();
   }
 
   async function load() {
@@ -575,6 +673,26 @@
     applySearchConditions(data[SEARCH_CONDITIONS_KEY]);
     applyAutomationSettings(data);
     await load();
+    await refreshAutomationStatus();
+  }
+
+  if (chrome.storage?.onChanged) {
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName !== 'local') return;
+      const watched = [
+        api.STORAGE_KEY,
+        CACHE_KEY,
+        COMPLETED_KEY,
+        EXCLUDED_KEY,
+        AUTO_SCAN_ENABLED_KEY,
+        AUTO_SCAN_LAST_ATTEMPT_KEY,
+        BG_PROBE_ENABLED_KEY,
+        BG_PROBE_INTERVAL_KEY,
+        BG_PROBE_QUEUE_KEY,
+        BG_PROBE_LAST_RUN_KEY,
+      ];
+      if (watched.some((key) => changes[key])) refreshAutomationStatus();
+    });
   }
 
   init();

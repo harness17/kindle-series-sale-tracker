@@ -415,9 +415,11 @@
     const staleness = Math.max(Number(scan?.scannedAt) || 0, lastAttempt);
     if (Date.now() - staleness < intervalD * 86400000) return;
 
+    if (!Array.isArray(scan?.items) || scan.items.length === 0) return;
+
     await chrome.storage.local.set({ [AUTO_SCAN_LAST_ATTEMPT_KEY]: Date.now() });
     silentAutoScan = true;
-    const mode = Array.isArray(scan?.items) && scan.items.length > 0 ? 'simple' : 'full';
+    const mode = 'simple';
     try {
       await collectKindleBooks(mode);
     } finally {

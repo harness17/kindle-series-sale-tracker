@@ -8,6 +8,7 @@
   const BG_PROBE_ENABLED_KEY = 'kstBgProbeEnabled';
   const BG_PROBE_INTERVAL_KEY = 'kstBgProbeIntervalH';
   const BG_PROBE_QUEUE_KEY = 'kstBgProbeQueue';
+  const BG_PROBE_LAST_RUN_KEY = 'kstBgProbeLastRunAt';
   const BG_BADGE_COUNT_KEY = 'kstBgBadgeCount';
   const ALARM_NAME = 'kstBgProbe';
   const CHUNK_SIZE = 8;
@@ -30,6 +31,10 @@
 
   function storageSet(payload) {
     return chrome.storage.local.set(payload);
+  }
+
+  function markBgProbeLastRun() {
+    return storageSet({ [BG_PROBE_LAST_RUN_KEY]: Date.now() });
   }
 
   function normalizeIntervalH(value) {
@@ -187,6 +192,7 @@
       console.log('[KST] background probe: no eligible series');
       await storageSet({ [BG_PROBE_QUEUE_KEY]: { cursor: 0, lastCycleAt: Date.now() } });
       await setBadge(data[BG_BADGE_COUNT_KEY]);
+      await markBgProbeLastRun();
       return;
     }
 
@@ -221,6 +227,7 @@
 
     const badgeCount = Number(response?.badgeCount) || 0;
     await setBadge(badgeCount);
+    await markBgProbeLastRun();
     console.log(
       '[KST] background probe done: %dms, badge=%d',
       Date.now() - t0, badgeCount
