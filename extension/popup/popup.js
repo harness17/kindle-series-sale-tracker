@@ -10,6 +10,14 @@
   const PRIORITY_KEY = 'kstPrioritySeries';
   const EXCLUDED_KEY = 'kstExcludedSeries';
   const BG_BADGE_COUNT_KEY = 'kstBgBadgeCount';
+  const AUTO_SCAN_ENABLED_KEY = 'kstAutoScanEnabled';
+  const AUTO_SCAN_INTERVAL_KEY = 'kstAutoScanIntervalD';
+  const AUTO_SCAN_LAST_ATTEMPT_KEY = 'kstAutoScanLastAttempt';
+  const AUTO_SCAN_ENABLED_AT_KEY = 'kstAutoScanEnabledAt';
+  const BG_PROBE_ENABLED_KEY = 'kstBgProbeEnabled';
+  const BG_PROBE_INTERVAL_KEY = 'kstBgProbeIntervalH';
+  const BG_PROBE_LAST_RUN_KEY = 'kstBgProbeLastRunAt';
+  const BG_PROBE_ENABLED_AT_KEY = 'kstBgProbeEnabledAt';
   const THEME_KEY = 'kstTheme';
   const LANGUAGE_KEY = i18n.LANGUAGE_KEY;
   const REQUEST_DELAY_MS = 350;
@@ -23,6 +31,8 @@
 
   const summary = document.getElementById('summary');
   const status = document.getElementById('status');
+  const popupAutoScanStatus = document.getElementById('popupAutoScanStatus');
+  const popupBgProbeStatus = document.getElementById('popupBgProbeStatus');
   const seriesList = document.getElementById('seriesList');
   const popupSort = document.getElementById('popupSort');
   const checkVisibleBtn = document.getElementById('checkVisible');
@@ -69,6 +79,93 @@
     return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()} ${String(
       date.getHours()
     ).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  }
+
+  function formatStatusDate(value) {
+    return formatScannedAt(value) || t('statusNeverRun');
+  }
+
+  function normalizeIntervalD(value) {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? n : 7;
+  }
+
+  function normalizeIntervalH(value) {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? n : 24;
+  }
+
+  // 実行済みなら「前回 <日時>」、未実行なら「前回 なし」。未実行の次回は「（予定）」付き。
+  function lastNextText(lastRun, base, intervalMs) {
+    const lastText = lastRun ? t('statusLastRun', formatStatusDate(lastRun)) : t('statusLastNone');
+    const nextRaw = t('statusNextRun', formatStatusDate(base + intervalMs));
+    const nextText = lastRun ? nextRaw : nextRaw + ' ' + t('statusProvisional');
+    return lastText + ' / ' + nextText;
+  }
+
+  async function ensureAutoScanEnabledAt(data) {
+    if (data[AUTO_SCAN_ENABLED_KEY] !== true || Number(data[AUTO_SCAN_ENABLED_AT_KEY]) > 0) {
+      return data[AUTO_SCAN_ENABLED_AT_KEY];
+    }
+    const enabledAt = Date.now();
+    data[AUTO_SCAN_ENABLED_AT_KEY] = enabledAt;
+    await chrome.storage.local.set({ [AUTO_SCAN_ENABLED_AT_KEY]: enabledAt });
+    return enabledAt;
+  }
+
+  async function ensureBgProbeEnabledAt(data) {
+    if (data[BG_PROBE_ENABLED_KEY] !== true || Number(data[BG_PROBE_ENABLED_AT_KEY]) > 0) {
+      return data[BG_PROBE_ENABLED_AT_KEY];
+    }
+    const enabledAt = Date.now();
+    data[BG_PROBE_ENABLED_AT_KEY] = enabledAt;
+    await chrome.storage.local.set({ [BG_PROBE_ENABLED_AT_KEY]: enabledAt });
+    return enabledAt;
+  }
+
+  function autoScanStatusText(data, scan) {
+    if (data[AUTO_SCAN_ENABLED_KEY] !== true) return t('statusDisabled');
+    const lastRun = (Number(data[AUTO_SCAN_LAST_ATTEMPT_KEY]) || 0) || (Number(scan?.scannedAt) || 0);
+    const base = lastRun || (Number(data[AUTO_SCAN_ENABLED_AT_KEY]) || 0);
+    const intervalMs = normalizeIntervalD(data[AUTO_SCAN_INTERVAL_KEY]) * 86400000;
+    return lastNextText(lastRun, base, intervalMs);
+  }
+
+  function bgProbeStatusText(data) {
+    if (data[BG_PROBE_ENABLED_KEY] !== true) return t('statusDisabled');
+    const lastRun = Number(data[BG_PROBE_LAST_RUN_KEY]) || 0;
+    const base = lastRun || (Number(data[BG_PROBE_ENABLED_AT_KEY]) || 0);
+    const intervalMs = normalizeIntervalH(data[BG_PROBE_INTERVAL_KEY]) * 60 * 60000;
+    return lastNextText(lastRun, base, intervalMs);
+  }
+
+  function snapshotBreakdown(scan) {
+    return (Array.isArray(scan?.series) ? scan.series : []).reduce((acc, group) => {
+      if (card.isConfirmedHasNext(group.catalog)) acc.next += 1;
+      if (card.discountValue(group.catalog) > 0) acc.discount += 1;
+      return acc;
+    }, { next: 0, discount: 0 });
+  }
+
+  async function setPopupStatus(scan) {
+    const data = await chrome.storage.local.get([
+      AUTO_SCAN_ENABLED_KEY,
+      AUTO_SCAN_INTERVAL_KEY,
+      AUTO_SCAN_LAST_ATTEMPT_KEY,
+      AUTO_SCAN_ENABLED_AT_KEY,
+      BG_PROBE_ENABLED_KEY,
+      BG_PROBE_INTERVAL_KEY,
+      BG_PROBE_LAST_RUN_KEY,
+      BG_PROBE_ENABLED_AT_KEY,
+    ]);
+    await ensureAutoScanEnabledAt(data);
+    await ensureBgProbeEnabledAt(data);
+    popupAutoScanStatus.textContent = autoScanStatusText(data, scan);
+    const breakdown = snapshotBreakdown(scan);
+    popupBgProbeStatus.textContent = data[BG_PROBE_ENABLED_KEY] === true
+      ? bgProbeStatusText(data) + ' / ' + t('statusBreakdown', breakdown.next, breakdown.discount)
+      : t('statusDisabled');
+    setStatus(scan ? t('lastScan', formatScannedAt(scan.scannedAt)) : '');
   }
 
   function downloadText(filename, mimeType, text) {
@@ -297,6 +394,7 @@
   async function refresh() {
     const scan = await getLastScan();
     render(scan);
+    await setPopupStatus(scan);
     const hasItems = Array.isArray(scan?.items) && scan.items.length > 0;
     const simpleBtn = document.getElementById('scanSimple');
     simpleBtn.disabled = !hasItems;
@@ -367,6 +465,7 @@
     await chrome.storage.local.set({ [LANGUAGE_KEY]: lang });
     i18n.applyI18n(document, lang);
     render(currentScan);
+    await setPopupStatus(currentScan);
   }
 
   document.getElementById('openLibrary').addEventListener('click', () => {
