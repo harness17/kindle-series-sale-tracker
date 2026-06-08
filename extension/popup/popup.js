@@ -11,7 +11,9 @@
   const EXCLUDED_KEY = 'kstExcludedSeries';
   const BG_BADGE_COUNT_KEY = 'kstBgBadgeCount';
   const AUTO_SCAN_ENABLED_KEY = 'kstAutoScanEnabled';
+  const AUTO_SCAN_INTERVAL_KEY = 'kstAutoScanIntervalD';
   const AUTO_SCAN_LAST_ATTEMPT_KEY = 'kstAutoScanLastAttempt';
+  const AUTO_SCAN_ENABLED_AT_KEY = 'kstAutoScanEnabledAt';
   const BG_PROBE_ENABLED_KEY = 'kstBgProbeEnabled';
   const BG_PROBE_LAST_RUN_KEY = 'kstBgProbeLastRunAt';
   const THEME_KEY = 'kstTheme';
@@ -79,6 +81,38 @@
     return formatScannedAt(value) || t('statusNeverRun');
   }
 
+  function normalizeIntervalD(value) {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? n : 7;
+  }
+
+  function provisionalDate(value) {
+    return formatStatusDate(value) + ' ' + t('statusProvisional');
+  }
+
+  async function ensureAutoScanEnabledAt(data) {
+    if (data[AUTO_SCAN_ENABLED_KEY] !== true || Number(data[AUTO_SCAN_ENABLED_AT_KEY]) > 0) {
+      return data[AUTO_SCAN_ENABLED_AT_KEY];
+    }
+    const enabledAt = Date.now();
+    data[AUTO_SCAN_ENABLED_AT_KEY] = enabledAt;
+    await chrome.storage.local.set({ [AUTO_SCAN_ENABLED_AT_KEY]: enabledAt });
+    return enabledAt;
+  }
+
+  function autoScanStatusText(data, scan) {
+    if (data[AUTO_SCAN_ENABLED_KEY] !== true) return t('statusDisabled');
+    const lastAttempt = Number(data[AUTO_SCAN_LAST_ATTEMPT_KEY]) || 0;
+    const scannedAt = Number(scan?.scannedAt) || 0;
+    const enabledAt = Number(data[AUTO_SCAN_ENABLED_AT_KEY]) || 0;
+    const base = lastAttempt || scannedAt || enabledAt;
+    const provisional = !lastAttempt && !scannedAt;
+    const intervalMs = normalizeIntervalD(data[AUTO_SCAN_INTERVAL_KEY]) * 86400000;
+    const lastText = provisional ? provisionalDate(base) : formatStatusDate(base);
+    const nextText = provisional ? provisionalDate(base + intervalMs) : formatStatusDate(base + intervalMs);
+    return t('statusLastRun', lastText) + ' / ' + t('statusNextRun', nextText);
+  }
+
   function snapshotBreakdown(scan) {
     return (Array.isArray(scan?.series) ? scan.series : []).reduce((acc, group) => {
       if (card.isConfirmedHasNext(group.catalog)) acc.next += 1;
@@ -90,14 +124,14 @@
   async function setPopupStatus(scan) {
     const data = await chrome.storage.local.get([
       AUTO_SCAN_ENABLED_KEY,
+      AUTO_SCAN_INTERVAL_KEY,
       AUTO_SCAN_LAST_ATTEMPT_KEY,
+      AUTO_SCAN_ENABLED_AT_KEY,
       BG_PROBE_ENABLED_KEY,
       BG_PROBE_LAST_RUN_KEY,
     ]);
-    const autoLastRun = Number(data[AUTO_SCAN_LAST_ATTEMPT_KEY]) || Number(scan?.scannedAt) || 0;
-    const autoText = data[AUTO_SCAN_ENABLED_KEY] === true
-      ? t('statusLastRun', formatStatusDate(autoLastRun))
-      : t('statusDisabled');
+    await ensureAutoScanEnabledAt(data);
+    const autoText = autoScanStatusText(data, scan);
     const breakdown = snapshotBreakdown(scan);
     const bgText = data[BG_PROBE_ENABLED_KEY] === true
       ? t('statusLastRun', formatStatusDate(data[BG_PROBE_LAST_RUN_KEY])) + ' / ' + t('statusBreakdown', breakdown.next, breakdown.discount)

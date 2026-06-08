@@ -13,6 +13,7 @@
   const AUTO_SCAN_ENABLED_KEY = 'kstAutoScanEnabled';
   const AUTO_SCAN_INTERVAL_KEY = 'kstAutoScanIntervalD';
   const AUTO_SCAN_LAST_ATTEMPT_KEY = 'kstAutoScanLastAttempt';
+  const AUTO_SCAN_ENABLED_AT_KEY = 'kstAutoScanEnabledAt';
   const BG_PROBE_ENABLED_KEY = 'kstBgProbeEnabled';
   const BG_PROBE_INTERVAL_KEY = 'kstBgProbeIntervalH';
   const BG_PROBE_QUEUE_KEY = 'kstBgProbeQueue';
@@ -162,6 +163,38 @@
     ).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
   }
 
+  function normalizeIntervalD(value) {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? n : 7;
+  }
+
+  function provisionalDate(value) {
+    return formatStatusDate(value) + ' ' + t('statusProvisional');
+  }
+
+  async function ensureAutoScanEnabledAt(data) {
+    if (data[AUTO_SCAN_ENABLED_KEY] !== true || Number(data[AUTO_SCAN_ENABLED_AT_KEY]) > 0) {
+      return data[AUTO_SCAN_ENABLED_AT_KEY];
+    }
+    const enabledAt = Date.now();
+    data[AUTO_SCAN_ENABLED_AT_KEY] = enabledAt;
+    await chrome.storage.local.set({ [AUTO_SCAN_ENABLED_AT_KEY]: enabledAt });
+    return enabledAt;
+  }
+
+  function autoScanStatusParts(data, scan) {
+    if (data[AUTO_SCAN_ENABLED_KEY] !== true) return [t('statusDisabled')];
+    const lastAttempt = Number(data[AUTO_SCAN_LAST_ATTEMPT_KEY]) || 0;
+    const scannedAt = Number(scan?.scannedAt) || 0;
+    const enabledAt = Number(data[AUTO_SCAN_ENABLED_AT_KEY]) || 0;
+    const base = lastAttempt || scannedAt || enabledAt;
+    const provisional = !lastAttempt && !scannedAt;
+    const intervalMs = normalizeIntervalD(data[AUTO_SCAN_INTERVAL_KEY]) * 86400000;
+    const lastText = provisional ? provisionalDate(base) : formatStatusDate(base);
+    const nextText = provisional ? provisionalDate(base + intervalMs) : formatStatusDate(base + intervalMs);
+    return [t('statusEnabled'), t('statusLastRun', lastText), t('statusNextRun', nextText)];
+  }
+
   function eligibleSeries(scan, completedMap, excludedMap) {
     return (Array.isArray(scan?.series) ? scan.series : [])
       .filter((s) => !completedMap[s.key] && !excludedMap[s.key] && Number.isFinite(s.highestVolume))
@@ -209,7 +242,9 @@
       COMPLETED_KEY,
       EXCLUDED_KEY,
       AUTO_SCAN_ENABLED_KEY,
+      AUTO_SCAN_INTERVAL_KEY,
       AUTO_SCAN_LAST_ATTEMPT_KEY,
+      AUTO_SCAN_ENABLED_AT_KEY,
       BG_PROBE_ENABLED_KEY,
       BG_PROBE_QUEUE_KEY,
       BG_PROBE_LAST_RUN_KEY,
@@ -219,11 +254,8 @@
     const excludedMap = data[EXCLUDED_KEY] || {};
     const eligible = eligibleSeries(scan, completedMap, excludedMap);
     const breakdown = snapshotBreakdown(eligible, data[CACHE_KEY] || {});
-    const autoLastRun = Number(data[AUTO_SCAN_LAST_ATTEMPT_KEY]) || Number(scan?.scannedAt) || 0;
-    const autoParts = data[AUTO_SCAN_ENABLED_KEY] === true
-      ? [t('statusEnabled'), t('statusLastRun', formatStatusDate(autoLastRun))]
-      : [t('statusDisabled'), t('statusLastRun', t('statusNeverRun'))];
-    els.autoScanStatus.textContent = autoParts.join(' / ');
+    await ensureAutoScanEnabledAt(data);
+    els.autoScanStatus.textContent = autoScanStatusParts(data, scan).join(' / ');
 
     const bgParts = data[BG_PROBE_ENABLED_KEY] === true
       ? [t('statusEnabled'), t('statusLastRun', formatStatusDate(data[BG_PROBE_LAST_RUN_KEY]))]
@@ -251,7 +283,9 @@
   }
 
   async function saveAutomationSetting(key, value) {
-    await chrome.storage.local.set({ [key]: value });
+    const payload = { [key]: value };
+    if (key === AUTO_SCAN_ENABLED_KEY && value === true) payload[AUTO_SCAN_ENABLED_AT_KEY] = Date.now();
+    await chrome.storage.local.set(payload);
     await reconcileAlarms();
     await refreshAutomationStatus();
   }
@@ -657,6 +691,7 @@
       SEARCH_CONDITIONS_KEY,
       AUTO_SCAN_ENABLED_KEY,
       AUTO_SCAN_INTERVAL_KEY,
+      AUTO_SCAN_ENABLED_AT_KEY,
       BG_PROBE_ENABLED_KEY,
       BG_PROBE_INTERVAL_KEY,
     ]);
@@ -672,6 +707,7 @@
 
     applySearchConditions(data[SEARCH_CONDITIONS_KEY]);
     applyAutomationSettings(data);
+    await ensureAutoScanEnabledAt(data);
     await load();
     await refreshAutomationStatus();
   }
@@ -685,7 +721,9 @@
         COMPLETED_KEY,
         EXCLUDED_KEY,
         AUTO_SCAN_ENABLED_KEY,
+        AUTO_SCAN_INTERVAL_KEY,
         AUTO_SCAN_LAST_ATTEMPT_KEY,
+        AUTO_SCAN_ENABLED_AT_KEY,
         BG_PROBE_ENABLED_KEY,
         BG_PROBE_INTERVAL_KEY,
         BG_PROBE_QUEUE_KEY,
