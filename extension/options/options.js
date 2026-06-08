@@ -173,8 +173,12 @@
     return Number.isFinite(n) && n > 0 ? n : 24;
   }
 
-  function provisionalDate(value) {
-    return formatStatusDate(value) + ' ' + t('statusProvisional');
+  // 実行済みなら「前回 <日時>」、未実行なら「前回 なし」。
+  // 次回は base+間隔。未実行（予定値）の場合は「（予定）」を付す。
+  function lastNextParts(lastRun, base, intervalMs) {
+    const lastText = lastRun ? t('statusLastRun', formatStatusDate(lastRun)) : t('statusLastNone');
+    const nextText = t('statusNextRun', formatStatusDate(base + intervalMs));
+    return [lastText, lastRun ? nextText : nextText + ' ' + t('statusProvisional')];
   }
 
   async function ensureAutoScanEnabledAt(data) {
@@ -199,27 +203,18 @@
 
   function autoScanStatusParts(data, scan) {
     if (data[AUTO_SCAN_ENABLED_KEY] !== true) return [t('statusDisabled')];
-    const lastAttempt = Number(data[AUTO_SCAN_LAST_ATTEMPT_KEY]) || 0;
-    const scannedAt = Number(scan?.scannedAt) || 0;
-    const enabledAt = Number(data[AUTO_SCAN_ENABLED_AT_KEY]) || 0;
-    const base = lastAttempt || scannedAt || enabledAt;
-    const provisional = !lastAttempt && !scannedAt;
+    const lastRun = (Number(data[AUTO_SCAN_LAST_ATTEMPT_KEY]) || 0) || (Number(scan?.scannedAt) || 0);
+    const base = lastRun || (Number(data[AUTO_SCAN_ENABLED_AT_KEY]) || 0);
     const intervalMs = normalizeIntervalD(data[AUTO_SCAN_INTERVAL_KEY]) * 86400000;
-    const lastText = provisional ? provisionalDate(base) : formatStatusDate(base);
-    const nextText = provisional ? provisionalDate(base + intervalMs) : formatStatusDate(base + intervalMs);
-    return [t('statusEnabled'), t('statusLastRun', lastText), t('statusNextRun', nextText)];
+    return [t('statusEnabled'), ...lastNextParts(lastRun, base, intervalMs)];
   }
 
   function bgProbeStatusParts(data) {
     if (data[BG_PROBE_ENABLED_KEY] !== true) return [t('statusDisabled')];
-    const lastRunAt = Number(data[BG_PROBE_LAST_RUN_KEY]) || 0;
-    const enabledAt = Number(data[BG_PROBE_ENABLED_AT_KEY]) || 0;
-    const base = lastRunAt || enabledAt;
-    const provisional = !lastRunAt;
+    const lastRun = Number(data[BG_PROBE_LAST_RUN_KEY]) || 0;
+    const base = lastRun || (Number(data[BG_PROBE_ENABLED_AT_KEY]) || 0);
     const intervalMs = normalizeIntervalH(data[BG_PROBE_INTERVAL_KEY]) * 60 * 60000;
-    const lastText = provisional ? provisionalDate(base) : formatStatusDate(base);
-    const nextText = provisional ? provisionalDate(base + intervalMs) : formatStatusDate(base + intervalMs);
-    return [t('statusEnabled'), t('statusLastRun', lastText), t('statusNextRun', nextText)];
+    return [t('statusEnabled'), ...lastNextParts(lastRun, base, intervalMs)];
   }
 
   function eligibleSeries(scan, completedMap, excludedMap) {
