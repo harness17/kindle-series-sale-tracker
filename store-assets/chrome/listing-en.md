@@ -44,6 +44,7 @@ Features:
 • Sidebar panel and dedicated options page
 • Opt-in background check for new volumes and sales (badge notification)
 • Opt-in auto-scan when visiting the Kindle library page
+• Automation status display — last/next run, new-volume and sale counts — in the sidebar and options page
 
 Privacy:
 All scan results and settings are stored locally in your browser (chrome.storage.local). No data is sent to any external server. Background checks also target only Amazon.co.jp pages, with results stored locally. Amazon credentials, cookies, and purchase history are never stored or transmitted to the developer.

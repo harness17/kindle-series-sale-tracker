@@ -8,115 +8,54 @@ Copy the text block below verbatim into the submission form.
 ## Submission text (copy as-is)
 
 ```text
-Thank you for reviewing Kindle Series Sale Tracker.
+Thank you for reviewing Kindle Series Sale Tracker (v0.4.0 resubmission).
+
+--- Changes from rejected submission ---
+
+"Unsafe assignment to innerHTML" in popup.js: fixed. All dynamic-value innerHTML
+replaced with createElement/textContent/appendChild. Remaining innerHTML uses only
+static HTML literals. Chrome-only API references (sidePanel, offscreen) changed to
+bracket-notation access to suppress static-analysis warnings; runtime-guarded and
+never called in Firefox.
 
 --- Purpose ---
 
-This extension helps users of Amazon.co.jp's Kindle store organize their purchased
-books into series, check whether follow-up volumes exist, and see prices and
-discounts — all locally in the browser, with no external server.
+Organizes Amazon.co.jp Kindle library into series, checks follow-up volumes, shows
+prices/discounts. All local, no external server.
 
---- Source code layout ---
+--- Technical summary ---
 
-extension/
-  background/background.js     — Minimal service worker. Firefox: no-op (sidePanel
-                                   API absent). Chrome: sets openPanelOnActionClick.
-  content/content.js           — Content script. Runs only on:
-                                   https://www.amazon.co.jp/hz/mycd/digital-console/
-                                   contentlist/booksAll*
-                                 On explicit user action, calls Amazon's own internal
-                                 Ajax endpoint (/hz/mycd/digital-console/ajax) to
-                                 read the user's Kindle library titles, authors, and
-                                 ASINs. Sends the parsed result to the sidebar via
-                                 chrome.runtime.sendMessage. Does NOT read cookies
-                                 or credentials directly.
-  shared/kindle-library.js     — Pure functions: parse Ajax response, normalize
-                                   series title and volume number from book titles.
-  shared/catalog-probe.js      — Pure functions: detect next unowned volume from
-                                   Amazon search result HTML (parsed as a document,
-                                   not executed).
-  shared/series-card.js        — DOM rendering helpers for series cards. No network.
-  shared/i18n.js               — Client-side ja/en text strings. No network.
-  shared/theme-init.js         — Reads chrome.storage.local for theme preference.
-  popup/popup.js + popup.html  — Firefox sidebar UI. On user action, fetches Amazon
-                                   search result pages via fetch() with
-                                   credentials:'include' to check follow-up volumes.
-                                   Parsed as document content only, never eval'd.
-  options/options.js           — Dedicated full-page UI. Same data, no extra network.
+No eval(), no new Function(), no remote scripts. Amazon HTML parsed via DOMParser
+as data only. Two opt-in automation features (disabled by default): background
+follow-up check (chrome.alarms, 12-48h interval) and auto-scan on library page
+visit (3-14 day cooldown). Execution status shown in sidebar/options page.
 
-No eval(), no new Function(), no remote script loading, no CDN, no external server.
-All bundled assets are static files inside the submitted ZIP.
+--- Network access (Amazon.co.jp only) ---
 
---- Network access ---
+1. Library scan: /hz/mycd/digital-console/ajax (user action or opt-in auto-scan)
+2. Follow-up check: /s?k=...&i=digital-text (user action or opt-in background)
 
-Two fetch patterns, both user-triggered:
+No other domains. No analytics. No telemetry. Cookies used for in-browser auth
+only, never stored or forwarded.
 
-1. Library scan (content script → Amazon Ajax):
-   URL: https://www.amazon.co.jp/hz/mycd/digital-console/ajax
-   Trigger: user clicks "Scan Library" button in the sidebar.
-   What it reads: Kindle library item data (title, author, ASIN, read status,
-   cover URL). The request uses the user's existing Amazon.co.jp browser session
-   (credentials:'include'). No credentials are stored or transmitted elsewhere.
+--- Host permission ---
 
-2. Follow-up volume check (popup.js → Amazon search):
-   URL: https://www.amazon.co.jp/s?k=<series title>&i=digital-text
-   Trigger: user clicks "Check Next Volume" for a series card.
-   What it reads: search result HTML — candidate titles, prices, discounts,
-   release dates, cover thumbnails. Parsed via DOMParser. Not executed.
+https://www.amazon.co.jp/* covers library Ajax + search results. Content script
+scoped to: .../hz/mycd/digital-console/contentlist/booksAll*
 
-No other domains are contacted. No analytics, no telemetry.
+--- How to test ---
 
---- Data storage ---
+Requires an Amazon.co.jp account with Kindle books (no test account — extension
+uses reviewer's own session, credentials never collected).
 
-All data is stored in browser.storage.local (mapped to chrome.storage.local):
-  - Library scan results (series candidates, volume ranges)
-  - Follow-up check cache (next volume info, prices)
-  - UI settings (theme, language, sort order)
-  - Per-series flags (priority, completed, excluded)
+1. Install → open Firefox sidebar "Kindle Series Sale Tracker"
+2. Open amazon.co.jp/hz/mycd/digital-console/contentlist/booksAll/dateDsc/
+3. Click "全件取得" (Scan Library)
+4. Click "再確認" (Check) on any series
+5. Open "専用ページ" → "自動化" to test opt-in automation
+6. JA/EN toggle in sidebar header
 
-Nothing is uploaded to any server. amazon.co.jp session cookies are used only to
-authenticate the in-browser fetch requests and are never read, stored, or forwarded.
-
---- Why the broad host permission ---
-
-The manifest declares:
-  "host_permissions": ["https://www.amazon.co.jp/*"]
-
-Reason: two distinct Amazon.co.jp URL patterns are accessed at runtime:
-  1. /hz/mycd/digital-console/ajax (library data)
-  2. /s?k=...&i=digital-text&page=N (search results for follow-up checks)
-     and occasional supplemental search patterns like
-     /s?k=<title>+<volume+number>+Kindle
-
-A narrower pattern covering both paths and all sub-variants would require a wildcard
-at the path level (/hz/* and /s*) or listing each pattern separately, which would
-not practically reduce the scope. The content script itself is narrowly scoped:
-  "matches": ["https://www.amazon.co.jp/hz/mycd/digital-console/contentlist/booksAll*"]
-
---- Testing without an Amazon.co.jp account ---
-
-The extension's core functionality requires an Amazon.co.jp account with Kindle books.
-If you do not have such an account, you can verify the extension's structure and
-permissions by:
-  1. Installing the extension.
-  2. Opening the Firefox sidebar — it shows an empty series list with scan buttons.
-  3. Inspecting the source in about:debugging or the submitted ZIP to confirm
-     no remote code, no external domains, and no credential harvesting.
-
-If you do have an Amazon.co.jp account with Kindle books:
-  1. Open https://www.amazon.co.jp/hz/mycd/digital-console/contentlist/booksAll/dateDsc/
-  2. Open the Firefox sidebar for "Kindle Series Sale Tracker".
-  3. Click the full scan button ("全件取得" / "Scan Library").
-  4. After the scan, series candidates appear in the list.
-  5. Click "再確認" / "Check" on any series to trigger a follow-up search.
-
-The UI language can be toggled between Japanese (default) and English using the
-language button (JA/EN) in the sidebar header.
-
---- Source availability ---
-
-Source code: https://github.com/harness17/kindle-series-sale-tracker
-License: MIT
+Source: https://github.com/harness17/kindle-series-sale-tracker (MIT)
 ```
 
 ---
