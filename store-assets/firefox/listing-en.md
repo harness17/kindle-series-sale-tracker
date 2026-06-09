@@ -2,8 +2,8 @@
 
 ## Upload Package
 
-- Zip: `dist/firefox/kindle-series-sale-tracker-firefox-v0.3.0.zip`
-- Version: `0.3.0`
+- Zip: `dist/firefox/kindle-series-sale-tracker-firefox-v0.4.0.zip`
+- Version: `0.4.0`
 - Extension ID: `kindle-series-sale-tracker@harness`
 
 ## Graphic Assets
@@ -56,12 +56,18 @@ This extension depends on Amazon.co.jp page structure. Changes on Amazon's side 
 This extension is designed for Amazon.co.jp (Japanese Kindle store) only.
 ```
 
-## Version Notes (0.3.0)
+## Version Notes (0.4.0)
 
 ```text
-Version 0.3.0
+Version 0.4.0
 
 New in this version:
+- Execution status display (last/next run, progress, new-volume & sale counts) for both automation features, in the sidebar and options page; collapsible and off by default
+- Background check now runs a catch-up on startup/update, so it stays reliable across extension reloads
+- Auto-scan now runs only the lightweight incremental fetch
+- No new permissions
+
+Previous (0.3.0):
 - Opt-in background check for new volumes and sales (badge notification)
 - Opt-in auto-scan when visiting the Kindle library page
 - Confirmation dialog for data deletion

@@ -130,8 +130,8 @@ License: MIT
 
 ## Checklist before submitting
 
-- [ ] The submitted ZIP matches the source at the commit tagged `v0.2.0`
-- [ ] `manifest.json` version field reads `0.2.0`
+- [ ] The submitted ZIP matches the source at the commit tagged `v0.4.0`
+- [ ] `manifest.json` version field reads `0.4.0`
 - [ ] No `CLAUDE_CODE_HANDOFF.md` or personal data files in the ZIP (excluded by build script)
 - [ ] `data_collection_permissions.required` is `["none"]` in `browser_specific_settings`
 - [ ] Source URL in the notes matches the public GitHub repository

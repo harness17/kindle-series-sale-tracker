@@ -123,8 +123,8 @@ License: MIT
 
 ## Checklist before submitting
 
-- [ ] The submitted ZIP matches the source at the commit tagged `v0.2.0`
-- [ ] `manifest.json` version field reads `0.2.0`
+- [ ] The submitted ZIP matches the source at the commit tagged `v0.4.0`
+- [ ] `manifest.json` version field reads `0.4.0`
 - [ ] No `CLAUDE_CODE_HANDOFF.md` or personal data files in the ZIP (verified by build script)
 - [ ] Host permission justification text in listing-en.md is copied to the Privacy tab
 - [ ] "Remote code usage" is set to No
