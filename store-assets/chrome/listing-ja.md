@@ -2,8 +2,8 @@
 
 ## Upload Package
 
-- Zip: `dist/chrome/kindle-series-sale-tracker-chrome-v0.3.0.zip`
-- Version: `0.3.0`
+- Zip: `dist/chrome/kindle-series-sale-tracker-chrome-v0.4.0.zip`
+- Version: `0.4.0`
 
 ## Graphic Assets
 
@@ -196,4 +196,6 @@ Kindle Series Sale Tracker stores scan results only in chrome.storage.local. It 
 The extension requests Amazon.co.jp host access because it must run on the Kindle library page and fetch Amazon.co.jp search results from the user's browser session. It does not request access to other websites.
 
 Version 0.3.0 adds two opt-in automation features: background catalog probe (using chrome.alarms + offscreen document for HTML parsing) and auto-scan on Kindle library page visit. Both are disabled by default and can be enabled in the options page. The offscreen document is created only during background probe execution and closed immediately after.
+
+Version 0.4.0 adds a collapsible "execution status" display (last run, next run, progress, and snapshot counts of series with new volumes / sales) for the two automation features, shown in the popup/side panel and the options page. It also makes the background catalog probe resilient to extension reloads/updates by running a catch-up check on startup/install instead of relying only on a periodic alarm, and auto-scan now only runs the lightweight incremental fetch. No new permissions are requested in 0.4.0; all data stays in chrome.storage.local.
 ```
