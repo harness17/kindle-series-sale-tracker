@@ -223,8 +223,11 @@
     currentScan = scan;
     if (!scan) {
       summary.textContent = t('unscanned');
-      seriesList.innerHTML =
-        '<div class="empty">' + t('openLibraryPrompt') + '</div>';
+      seriesList.textContent = '';
+      const emptyPrompt = document.createElement('div');
+      emptyPrompt.className = 'empty';
+      emptyPrompt.textContent = t('openLibraryPrompt');
+      seriesList.appendChild(emptyPrompt);
       checkVisibleBtn.disabled = true;
       checkSimpleBtn.disabled = true;
       return;
@@ -238,8 +241,10 @@
     checkSimpleBtn.disabled = checkVisibleBtn.disabled;
 
     if (!groups.length) {
-      seriesList.innerHTML =
-        '<div class="empty">' + t('noSeriesFound') + '</div>';
+      const emptyMsg = document.createElement('div');
+      emptyMsg.className = 'empty';
+      emptyMsg.textContent = t('noSeriesFound');
+      seriesList.appendChild(emptyMsg);
       checkVisibleBtn.disabled = true;
       checkSimpleBtn.disabled = true;
       return;

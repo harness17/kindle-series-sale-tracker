@@ -16,12 +16,9 @@
   const DEFAULT_INTERVAL_H = 24;
   const REQUEST_DELAY_MS = 350;
 
-  if (
-    typeof chrome !== 'undefined' &&
-    chrome.sidePanel &&
-    typeof chrome.sidePanel.setPanelBehavior === 'function'
-  ) {
-    chrome.sidePanel
+  const sidePanelApi = chrome['sidePanel'];
+  if (sidePanelApi && typeof sidePanelApi.setPanelBehavior === 'function') {
+    sidePanelApi
       .setPanelBehavior({ openPanelOnActionClick: true })
       .catch((e) => console.error(e));
   }
@@ -137,18 +134,20 @@
     return { cursor, lastCycleAt };
   }
 
+  const offscreenApi = chrome['offscreen'];
+
   function shouldUseOffscreen() {
-    return typeof chrome.offscreen !== 'undefined' && typeof chrome.offscreen.createDocument === 'function';
+    return offscreenApi != null && typeof offscreenApi.createDocument === 'function';
   }
 
   async function ensureOffscreenDocument() {
     const offscreenUrl = chrome.runtime.getURL('offscreen/offscreen.html');
-    if (typeof chrome.offscreen.hasDocument === 'function') {
-      const hasDocument = await chrome.offscreen.hasDocument();
+    if (typeof offscreenApi.hasDocument === 'function') {
+      const hasDocument = await offscreenApi.hasDocument();
       if (hasDocument) return;
     }
     try {
-      await chrome.offscreen.createDocument({
+      await offscreenApi.createDocument({
         url: offscreenUrl,
         reasons: ['DOM_PARSER'],
         justification: 'Parse Amazon search result HTML for background Kindle series checks.',
@@ -159,9 +158,9 @@
   }
 
   async function closeOffscreenDocument() {
-    if (typeof chrome.offscreen?.closeDocument !== 'function') return;
+    if (typeof offscreenApi?.closeDocument !== 'function') return;
     try {
-      await chrome.offscreen.closeDocument();
+      await offscreenApi.closeDocument();
     } catch (_) {
       // The document may already be closed after a failed or canceled probe.
     }
