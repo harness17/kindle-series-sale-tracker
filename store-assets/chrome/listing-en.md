@@ -2,8 +2,8 @@
 
 ## Upload Package
 
-- Zip: `dist/chrome/kindle-series-sale-tracker-chrome-v0.4.0.zip`
-- Version: `0.4.0`
+- Zip: `dist/chrome/kindle-series-sale-tracker-chrome-v0.4.4.zip`
+- Version: `0.4.4`
 
 ## Graphic Assets
 
@@ -44,7 +44,7 @@ Features:
 • Sidebar panel and dedicated options page
 • Opt-in background check for new volumes and sales (badge notification)
 • Opt-in auto-scan when visiting the Kindle library page
-• Automation status display — last/next run, new-volume and sale counts — in the sidebar and options page
+• Automation status display — trigger decisions, running/completed/failed state, skip reasons, and result counts — in the sidebar and options page
 
 Privacy:
 All scan results and settings are stored locally in your browser (chrome.storage.local). No data is sent to any external server. Background checks also target only Amazon.co.jp pages, with results stored locally. Amazon credentials, cookies, and purchase history are never stored or transmitted to the developer.
@@ -182,6 +182,8 @@ The extension requests Amazon.co.jp host access because it must run on the Kindl
 Version 0.3.0 adds two opt-in automation features: background catalog probe (using chrome.alarms + offscreen document for HTML parsing) and auto-scan on Kindle library page visit. Both are disabled by default and can be enabled in the options page. The offscreen document is created only during background probe execution and closed immediately after.
 
 Version 0.4.0 adds a collapsible "execution status" display (last run, next run, progress, and snapshot counts of series with new volumes / sales) for the two automation features, shown in the popup/side panel and the options page. It also makes the background catalog probe resilient to extension reloads/updates by running a catch-up check on startup/install instead of relying only on a periodic alarm, and auto-scan now only runs the lightweight incremental fetch. No new permissions are requested in 0.4.0; all data stays in chrome.storage.local.
+
+Version 0.4.4 updates every eligible series during one scheduled background cycle while retaining throttled batches, adds running/completed/failed counts for background checks, and records auto-scan trigger decisions, skip reasons, progress, completion, and failure. It also improves effective Kindle price handling when Kindle Unlimited and coupons are shown together. No new permissions are requested.
 
 The UI supports Japanese and English (toggle in the sidebar header).
 ```

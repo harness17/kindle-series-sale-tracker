@@ -2,8 +2,8 @@
 
 - [ ] Confirm `manifests/firefox.json` includes `browser_specific_settings.gecko.id`.
 - [ ] Confirm `manifests/firefox.json` includes `browser_specific_settings.gecko.data_collection_permissions.required: ["none"]`.
-- [ ] Upload `dist/firefox/kindle-series-sale-tracker-firefox-v0.1.0.zip`.
-- [ ] Confirm uploaded version is `0.1.0`.
+- [ ] Upload `dist/firefox/kindle-series-sale-tracker-firefox-v0.4.4.zip`.
+- [ ] Confirm uploaded version is `0.4.4`.
 - [ ] Upload icon `extension/icons/icon128.png`.
 - [ ] Upload screenshots:
   - `store-assets/firefox/screenshots/01-options-list-1280x800.png`

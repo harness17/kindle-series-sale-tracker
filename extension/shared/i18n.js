@@ -138,6 +138,31 @@
       statusLastNone: '前回 なし',
       statusNextRun: function (date) { return '次回 ' + date; },
       statusProgress: function (done, total) { return '確認中 ' + done + '/' + total; },
+      statusAutoChecking: function (date) { return '発火 ' + date + ' / 判定中'; },
+      statusAutoSkippedNotDue: function (date, next) {
+        return '発火 ' + date + ' / 間隔未到来（次回 ' + next + '）';
+      },
+      statusAutoSkippedNoBaseline: function (date) {
+        return '発火 ' + date + ' / 初回データなしのため未実行';
+      },
+      statusAutoRunning: function (triggered, value, max) {
+        return '発火 ' + triggered + ' / 実行中 ' + value + (max > 0 ? '/' + max : '') + '件確認';
+      },
+      statusAutoCompleted: function (triggered, date, total, added) {
+        return '発火 ' + triggered + ' / 完了 ' + date + ' / ' + total + '冊（追加 ' + added + '）';
+      },
+      statusAutoFailed: function (triggered, date) {
+        return '発火 ' + triggered + ' / 失敗 ' + date;
+      },
+      statusRunRunning: function (done, total, failed) {
+        return '実行中 ' + done + '/' + total + (failed ? '（失敗 ' + failed + '）' : '');
+      },
+      statusRunCompleted: function (date, total, failed) {
+        return '完了 ' + date + ' / ' + total + '件' + (failed ? '（失敗 ' + failed + '）' : '');
+      },
+      statusRunFailed: function (date, done, total) {
+        return '中断 ' + date + ' / ' + done + '/' + total;
+      },
       statusBreakdown: function (next, discount) { return '続刊あり ' + next + ' / セール ' + discount; },
       days3: '3日',
       days7: '7日',
@@ -305,6 +330,31 @@
       statusLastNone: 'Last none',
       statusNextRun: function (date) { return 'Next ' + date; },
       statusProgress: function (done, total) { return 'Checking ' + done + '/' + total; },
+      statusAutoChecking: function (date) { return 'Triggered ' + date + ' / Checking'; },
+      statusAutoSkippedNotDue: function (date, next) {
+        return 'Triggered ' + date + ' / Not due (next ' + next + ')';
+      },
+      statusAutoSkippedNoBaseline: function (date) {
+        return 'Triggered ' + date + ' / Skipped: no baseline';
+      },
+      statusAutoRunning: function (triggered, value, max) {
+        return 'Triggered ' + triggered + ' / Running ' + value + (max > 0 ? '/' + max : '') + ' checked';
+      },
+      statusAutoCompleted: function (triggered, date, total, added) {
+        return 'Triggered ' + triggered + ' / Completed ' + date + ' / ' + total + ' books (' + added + ' added)';
+      },
+      statusAutoFailed: function (triggered, date) {
+        return 'Triggered ' + triggered + ' / Failed ' + date;
+      },
+      statusRunRunning: function (done, total, failed) {
+        return 'Running ' + done + '/' + total + (failed ? ' (' + failed + ' failed)' : '');
+      },
+      statusRunCompleted: function (date, total, failed) {
+        return 'Completed ' + date + ' / ' + total + (failed ? ' (' + failed + ' failed)' : '');
+      },
+      statusRunFailed: function (date, done, total) {
+        return 'Stopped ' + date + ' / ' + done + '/' + total;
+      },
       statusBreakdown: function (next, discount) { return 'Next vol ' + next + ' / Sale ' + discount; },
       days3: '3 days',
       days7: '7 days',

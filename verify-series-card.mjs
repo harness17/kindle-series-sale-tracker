@@ -88,6 +88,23 @@ const checks = [
     })(),
   },
   {
+    name: 'ブラウザでは価格計算版が一致しない旧キャッシュを表示しない',
+    ok: (() => {
+      const previousCatalog = globalThis.__KST_CATALOG__;
+      globalThis.__KST_CATALOG__ = { PRICE_CALC_VERSION: 7 };
+      const oldOffer = resolvePrimaryOffer(hasNext);
+      const currentOffer = resolvePrimaryOffer({ ...hasNext, nextPriceCalcVersion: 7 });
+      if (previousCatalog === undefined) delete globalThis.__KST_CATALOG__;
+      else globalThis.__KST_CATALOG__ = previousCatalog;
+      return (
+        oldOffer.priceText === '' &&
+        oldOffer.discountRate === null &&
+        currentOffer.priceText === '￥396' &&
+        currentOffer.discountRate === 50
+      );
+    })(),
+  },
+  {
     name: 'discountValue は割引率を返し、割引なし/未照会は -1 を返す',
     ok:
       discountValue(hasNext) === 50 &&

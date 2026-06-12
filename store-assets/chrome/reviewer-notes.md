@@ -20,8 +20,8 @@ discounts — all locally in the browser, with no external server.
 --- Source code layout ---
 
 extension/
-  background/background.js     — Service worker. Sets openPanelOnActionClick so the
-                                   extension action opens the side panel directly.
+  background/background.js     — Service worker. Opens the side panel and runs the
+                                   opt-in scheduled follow-up check in throttled batches.
   content/content.js           — Content script. Runs only on:
                                    https://www.amazon.co.jp/hz/mycd/digital-console/
                                    contentlist/booksAll*
@@ -50,18 +50,20 @@ All bundled assets are static files inside the submitted ZIP.
 
 --- Network access ---
 
-Two fetch patterns, both user-triggered:
+Two fetch patterns, triggered by user action or the corresponding opt-in automation:
 
 1. Library scan (content script → Amazon Ajax):
    URL: https://www.amazon.co.jp/hz/mycd/digital-console/ajax
-   Trigger: user clicks "Scan Library" button in the side panel.
+   Trigger: user clicks "Scan Library", or the user-enabled auto-scan becomes due
+   when the Kindle library page is visited.
    What it reads: Kindle library item data (title, author, ASIN, read status,
    cover URL). Uses the user's existing Amazon.co.jp browser session
    (credentials:'include'). No credentials are stored or transmitted elsewhere.
 
 2. Follow-up volume check (popup.js → Amazon search):
    URL: https://www.amazon.co.jp/s?k=<series title>&i=digital-text
-   Trigger: user clicks "Check Next Volume" for a series card.
+   Trigger: user clicks "Check Next Volume", or the user-enabled scheduled
+   background check becomes due.
    What it reads: search result HTML — candidate titles, prices, discounts,
    release dates, cover thumbnails. Parsed via DOMParser. Not executed as code.
 
@@ -106,6 +108,8 @@ Steps:
 5. Click "再確認" / "Check" on any series card to trigger a follow-up search.
    Price, discount rate, and release date are shown when available on Amazon.co.jp.
 6. To switch the UI to English, click the "JA/EN" toggle in the side panel header.
+7. In "専用ページ" / the options page, enable either automation feature and
+   review its trigger, running, completed, failed, or skipped status.
 
 --- Source availability ---
 
@@ -123,8 +127,8 @@ License: MIT
 
 ## Checklist before submitting
 
-- [ ] The submitted ZIP matches the source at the commit tagged `v0.4.0`
-- [ ] `manifest.json` version field reads `0.4.0`
+- [ ] The submitted ZIP matches the source at the commit tagged `v0.4.4`
+- [ ] `manifest.json` version field reads `0.4.4`
 - [ ] No `CLAUDE_CODE_HANDOFF.md` or personal data files in the ZIP (verified by build script)
 - [ ] Host permission justification text in listing-en.md is copied to the Privacy tab
 - [ ] "Remote code usage" is set to No

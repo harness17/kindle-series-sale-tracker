@@ -3,12 +3,15 @@
 
   const STORAGE_KEY = globalThis.__KST__?.STORAGE_KEY || 'kstLastScan';
   const CACHE_KEY = 'kstCatalogCache';
+  const CATALOG_PRICE_VERSION_KEY = 'kstCatalogPriceVersion';
+  const CATALOG_PRICE_VERSION = 7;
   const COMPLETED_KEY = 'kstCompletedSeries';
   const EXCLUDED_KEY = 'kstExcludedSeries';
   const BG_PROBE_ENABLED_KEY = 'kstBgProbeEnabled';
   const BG_PROBE_INTERVAL_KEY = 'kstBgProbeIntervalH';
   const BG_PROBE_QUEUE_KEY = 'kstBgProbeQueue';
   const BG_PROBE_LAST_RUN_KEY = 'kstBgProbeLastRunAt';
+  const BG_PROBE_RUN_STATE_KEY = 'kstBgProbeRunState';
   const BG_PROBE_ENABLED_AT_KEY = 'kstBgProbeEnabledAt';
   const BG_BADGE_COUNT_KEY = 'kstBgBadgeCount';
   const ALARM_NAME = 'kstBgProbe';
@@ -31,8 +34,23 @@
     return chrome.storage.local.set(payload);
   }
 
-  function markBgProbeLastRun() {
-    return storageSet({ [BG_PROBE_LAST_RUN_KEY]: Date.now() });
+  async function ensureCatalogPriceVersion() {
+    const data = await storageGet(CATALOG_PRICE_VERSION_KEY);
+    if (data[CATALOG_PRICE_VERSION_KEY] === CATALOG_PRICE_VERSION) return;
+    await chrome.storage.local.remove(CACHE_KEY);
+    await storageSet({ [CATALOG_PRICE_VERSION_KEY]: CATALOG_PRICE_VERSION });
+  }
+
+  function markBgProbeCompleted(runState) {
+    const finishedAt = Date.now();
+    return storageSet({
+      [BG_PROBE_LAST_RUN_KEY]: finishedAt,
+      [BG_PROBE_RUN_STATE_KEY]: {
+        ...runState,
+        status: 'completed',
+        finishedAt,
+      },
+    });
   }
 
   function normalizeIntervalH(value) {
@@ -103,6 +121,7 @@
   }
 
   async function handleWake() {
+    await ensureCatalogPriceVersion();
     await reconcileAlarms();
     await ensureBgProbeEnabledAt();
     await maybeRunDueBgProbe();
@@ -198,6 +217,7 @@
     const card = globalThis.__KST_CARD__;
     const newCache = {};
     let badgeCount = Number(currentBadgeCount) || 0;
+    let failedCount = 0;
     let isFirst = true;
 
     for (const series of chunk) {
@@ -209,19 +229,27 @@
         newCache[series.key] = cacheEntry;
         badgeCount = badgeForResult(card, series, cacheEntry, prevCache[series.key], badgeCount);
       } catch (error) {
+        failedCount += 1;
         console.warn('[KST] background probe skipped', series?.key || series?.title, error);
       }
     }
 
+    const updatedQueue = nextQueue(queue, chunk.length);
     await storageSet({
       [CACHE_KEY]: { ...prevCache, ...newCache },
-      [BG_PROBE_QUEUE_KEY]: nextQueue(queue, chunk.length),
+      [BG_PROBE_QUEUE_KEY]: updatedQueue,
       [BG_BADGE_COUNT_KEY]: badgeCount,
     });
-    return { done: true, badgeCount };
+    return {
+      done: true,
+      badgeCount,
+      cacheEntries: newCache,
+      failedCount,
+      queue: updatedQueue,
+    };
   }
 
-  async function runBackgroundProbe() {
+  async function runBackgroundProbeOnce() {
     const data = await storageGet([
       BG_PROBE_ENABLED_KEY,
       STORAGE_KEY,
@@ -240,46 +268,113 @@
       console.log('[KST] background probe: no eligible series');
       await storageSet({ [BG_PROBE_QUEUE_KEY]: { cursor: 0, lastCycleAt: Date.now() } });
       await setBadge(data[BG_BADGE_COUNT_KEY]);
-      await markBgProbeLastRun();
+      await markBgProbeCompleted({
+        startedAt: Date.now(),
+        total: 0,
+        processed: 0,
+        succeeded: 0,
+        failed: 0,
+      });
       return;
     }
 
-    const queue = currentQueue(data[BG_PROBE_QUEUE_KEY] || {}, eligible.length);
-    const chunk = eligible.slice(queue.cursor, queue.cursor + CHUNK_SIZE);
-    const prevCache = data[CACHE_KEY] || {};
-    const currentBadgeCount = Number(data[BG_BADGE_COUNT_KEY]) || 0;
+    let queue = currentQueue(data[BG_PROBE_QUEUE_KEY] || {}, eligible.length);
+    let prevCache = data[CACHE_KEY] || {};
+    let badgeCount = Number(data[BG_BADGE_COUNT_KEY]) || 0;
+    const startedAt = Date.now();
+    let processed = queue.cursor;
+    let succeeded = queue.cursor;
+    let failed = 0;
+    let runState = {
+      status: 'running',
+      startedAt,
+      total: eligible.length,
+      processed,
+      succeeded,
+      failed,
+    };
+    await storageSet({ [BG_PROBE_RUN_STATE_KEY]: runState });
     const mode = shouldUseOffscreen() ? 'offscreen' : 'inline';
     console.log(
-      '[KST] background probe started: %d/%d series (cursor %d, chunk %d, mode %s)',
-      chunk.length, eligible.length, queue.cursor, CHUNK_SIZE, mode
+      '[KST] background probe cycle started: %d series (cursor %d, chunk %d, mode %s)',
+      eligible.length, queue.cursor, CHUNK_SIZE, mode
     );
     const t0 = Date.now();
-    let response;
 
-    if (mode === 'offscreen') {
-      try {
-        await ensureOffscreenDocument();
-        response = await sendRuntimeMessage({
-          type: 'kst:bgProbeChunk',
-          chunk,
-          prevCache,
-          currentBadgeCount,
-          queue,
-        });
-      } finally {
-        await closeOffscreenDocument();
-      }
-    } else {
-      response = await probeInline(chunk, prevCache, currentBadgeCount, queue);
+    try {
+      if (mode === 'offscreen') await ensureOffscreenDocument();
+
+      let processedThisRun = 0;
+      do {
+        const chunk = eligible.slice(queue.cursor, queue.cursor + CHUNK_SIZE);
+        const response =
+          mode === 'offscreen'
+            ? await sendRuntimeMessage({
+                type: 'kst:bgProbeChunk',
+                chunk,
+                prevCache,
+                currentBadgeCount: badgeCount,
+                queue,
+              })
+            : await probeInline(chunk, prevCache, badgeCount, queue);
+
+        if (response?.done !== true) {
+          throw new Error(response?.error || 'Background catalog probe chunk failed');
+        }
+
+        prevCache = { ...prevCache, ...(response.cacheEntries || {}) };
+        badgeCount = Number(response.badgeCount) || 0;
+        const chunkSucceeded = Object.keys(response.cacheEntries || {}).length;
+        const chunkFailed = Number(response.failedCount) || 0;
+        processed += chunk.length;
+        succeeded += chunkSucceeded;
+        failed += chunkFailed;
+        queue = {
+          ...(response.queue || nextQueue(queue, chunk.length)),
+          eligibleLength: eligible.length,
+        };
+        processedThisRun += chunk.length;
+        runState = {
+          ...runState,
+          processed: Math.min(processed, eligible.length),
+          succeeded: Math.min(succeeded, eligible.length),
+          failed,
+        };
+        await storageSet({ [BG_PROBE_RUN_STATE_KEY]: runState });
+
+        if (queue.cursor !== 0 && processedThisRun < eligible.length) {
+          await delay(REQUEST_DELAY_MS);
+        }
+      } while (queue.cursor !== 0 && processedThisRun < eligible.length);
+    } catch (error) {
+      await storageSet({
+        [BG_PROBE_RUN_STATE_KEY]: {
+          ...runState,
+          status: 'failed',
+          finishedAt: Date.now(),
+        },
+      });
+      throw error;
+    } finally {
+      if (mode === 'offscreen') await closeOffscreenDocument();
     }
 
-    const badgeCount = Number(response?.badgeCount) || 0;
+    await markBgProbeCompleted(runState);
     await setBadge(badgeCount);
-    await markBgProbeLastRun();
     console.log(
-      '[KST] background probe done: %dms, badge=%d',
+      '[KST] background probe cycle done: %dms, badge=%d',
       Date.now() - t0, badgeCount
     );
+  }
+
+  let activeBgProbe = null;
+
+  function runBackgroundProbe() {
+    if (activeBgProbe) return activeBgProbe;
+    activeBgProbe = runBackgroundProbeOnce().finally(() => {
+      activeBgProbe = null;
+    });
+    return activeBgProbe;
   }
 
   if (chrome.runtime?.onInstalled) {
@@ -287,6 +382,10 @@
       handleWake().catch((e) => console.warn('[KST] background wake failed', e));
     });
   }
+
+  ensureCatalogPriceVersion().catch((e) =>
+    console.warn('[KST] catalog price cache migration failed', e)
+  );
 
   if (chrome.runtime?.onStartup) {
     chrome.runtime.onStartup.addListener(() => {

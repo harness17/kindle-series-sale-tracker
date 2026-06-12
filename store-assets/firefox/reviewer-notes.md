@@ -8,15 +8,14 @@ Copy the text block below verbatim into the submission form.
 ## Submission text (copy as-is)
 
 ```text
-Thank you for reviewing Kindle Series Sale Tracker (v0.4.0 resubmission).
+Thank you for reviewing Kindle Series Sale Tracker v0.4.4.
 
---- Changes from rejected submission ---
+--- Changes in v0.4.4 ---
 
-"Unsafe assignment to innerHTML" in popup.js: fixed. All dynamic-value innerHTML
-replaced with createElement/textContent/appendChild. Remaining innerHTML uses only
-static HTML literals. Chrome-only API references (sidePanel, offscreen) changed to
-bracket-notation access to suppress static-analysis warnings; runtime-guarded and
-never called in Firefox.
+Each scheduled background cycle now checks every eligible series in throttled
+batches. The sidebar/options page shows background progress and failures, plus
+auto-scan trigger decisions, skip reasons, progress, completion, and failure.
+Kindle Unlimited + coupon price parsing is also improved. No new permissions.
 
 --- Purpose ---
 
@@ -69,8 +68,8 @@ Source: https://github.com/harness17/kindle-series-sale-tracker (MIT)
 
 ## Checklist before submitting
 
-- [ ] The submitted ZIP matches the source at the commit tagged `v0.4.0`
-- [ ] `manifest.json` version field reads `0.4.0`
+- [ ] The submitted ZIP matches the source at the commit tagged `v0.4.4`
+- [ ] `manifest.json` version field reads `0.4.4`
 - [ ] No `CLAUDE_CODE_HANDOFF.md` or personal data files in the ZIP (excluded by build script)
 - [ ] `data_collection_permissions.required` is `["none"]` in `browser_specific_settings`
 - [ ] Source URL in the notes matches the public GitHub repository

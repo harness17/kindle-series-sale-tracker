@@ -6,6 +6,8 @@
   const card = window.__KST_CARD__;
   const i18n = window.__KST_I18N__;
   const CACHE_KEY = 'kstCatalogCache';
+  const CATALOG_PRICE_VERSION_KEY = 'kstCatalogPriceVersion';
+  const CATALOG_PRICE_VERSION = 7;
   const COMPLETED_KEY = 'kstCompletedSeries'; // 手動の完結フラグ { [seriesKey]: true }
   const PRIORITY_KEY = 'kstPrioritySeries'; // 優先表示フラグ { [seriesKey]: true }
   const EXCLUDED_KEY = 'kstExcludedSeries'; // 除外フラグ { [seriesKey]: true }
@@ -13,11 +15,13 @@
   const AUTO_SCAN_ENABLED_KEY = 'kstAutoScanEnabled';
   const AUTO_SCAN_INTERVAL_KEY = 'kstAutoScanIntervalD';
   const AUTO_SCAN_LAST_ATTEMPT_KEY = 'kstAutoScanLastAttempt';
+  const AUTO_SCAN_RUN_STATE_KEY = 'kstAutoScanRunState';
   const AUTO_SCAN_ENABLED_AT_KEY = 'kstAutoScanEnabledAt';
   const BG_PROBE_ENABLED_KEY = 'kstBgProbeEnabled';
   const BG_PROBE_INTERVAL_KEY = 'kstBgProbeIntervalH';
   const BG_PROBE_QUEUE_KEY = 'kstBgProbeQueue';
   const BG_PROBE_LAST_RUN_KEY = 'kstBgProbeLastRunAt';
+  const BG_PROBE_RUN_STATE_KEY = 'kstBgProbeRunState';
   const BG_PROBE_ENABLED_AT_KEY = 'kstBgProbeEnabledAt';
   const THEME_KEY = 'kstTheme';
   const LANGUAGE_KEY = i18n.LANGUAGE_KEY;
@@ -61,6 +65,13 @@
   let priority = {}; // seriesKey -> true（優先表示フラグ）
   let excluded = {}; // seriesKey -> true（除外フラグ）
   let baseSummary = ''; // クリア後などに戻す件数表示
+
+  async function ensureCatalogPriceVersion() {
+    const data = await chrome.storage.local.get(CATALOG_PRICE_VERSION_KEY);
+    if (data[CATALOG_PRICE_VERSION_KEY] === CATALOG_PRICE_VERSION) return;
+    await chrome.storage.local.remove(CACHE_KEY);
+    await chrome.storage.local.set({ [CATALOG_PRICE_VERSION_KEY]: CATALOG_PRICE_VERSION });
+  }
 
   function normalizeTheme(value) {
     return window.__KST_THEME__?.normalizeTheme(value)
@@ -209,6 +220,39 @@
     return [t('statusEnabled'), ...lastNextParts(lastRun, base, intervalMs)];
   }
 
+  function autoScanRunStateText(value) {
+    if (!value || typeof value !== 'object') return '';
+    const checkedAt = formatStatusDate(value.checkedAt);
+    if (value.status === 'checking') return t('statusAutoChecking', checkedAt);
+    if (value.status === 'skipped-not-due') {
+      return t('statusAutoSkippedNotDue', checkedAt, formatStatusDate(value.nextDueAt));
+    }
+    if (value.status === 'skipped-no-baseline') {
+      return t('statusAutoSkippedNoBaseline', checkedAt);
+    }
+    if (value.status === 'running') {
+      return t(
+        'statusAutoRunning',
+        checkedAt,
+        Number(value.progressValue) || 0,
+        Number(value.progressMax) || 0
+      );
+    }
+    if (value.status === 'completed') {
+      return t(
+        'statusAutoCompleted',
+        checkedAt,
+        formatStatusDate(value.finishedAt),
+        Number(value.totalItems) || 0,
+        Number(value.addedItems) || 0
+      );
+    }
+    if (value.status === 'failed') {
+      return t('statusAutoFailed', checkedAt, formatStatusDate(value.finishedAt));
+    }
+    return '';
+  }
+
   function bgProbeStatusParts(data) {
     if (data[BG_PROBE_ENABLED_KEY] !== true) return [t('statusDisabled')];
     const lastRun = Number(data[BG_PROBE_LAST_RUN_KEY]) || 0;
@@ -231,6 +275,21 @@
     return Math.min(Math.max(cursor, 0), total);
   }
 
+  function bgRunStateText(value) {
+    if (!value || typeof value !== 'object') return '';
+    const total = Number(value.total) || 0;
+    const processed = Math.min(Number(value.processed) || 0, total);
+    const failed = Number(value.failed) || 0;
+    if (value.status === 'running') return t('statusRunRunning', processed, total, failed);
+    if (value.status === 'failed') {
+      return t('statusRunFailed', formatStatusDate(value.finishedAt), processed, total);
+    }
+    if (value.status === 'completed') {
+      return t('statusRunCompleted', formatStatusDate(value.finishedAt), total, failed);
+    }
+    return '';
+  }
+
   function snapshotBreakdown(eligible, catalogCache) {
     return eligible.reduce((acc, s) => {
       const reconciled = card.reconcileCatalog(catalogCache[s.key], s.highestVolume);
@@ -249,11 +308,13 @@
       AUTO_SCAN_ENABLED_KEY,
       AUTO_SCAN_INTERVAL_KEY,
       AUTO_SCAN_LAST_ATTEMPT_KEY,
+      AUTO_SCAN_RUN_STATE_KEY,
       AUTO_SCAN_ENABLED_AT_KEY,
       BG_PROBE_ENABLED_KEY,
       BG_PROBE_INTERVAL_KEY,
       BG_PROBE_QUEUE_KEY,
       BG_PROBE_LAST_RUN_KEY,
+      BG_PROBE_RUN_STATE_KEY,
       BG_PROBE_ENABLED_AT_KEY,
     ]);
     const scan = data[api.STORAGE_KEY] || null;
@@ -262,12 +323,24 @@
     const eligible = eligibleSeries(scan, completedMap, excludedMap);
     const breakdown = snapshotBreakdown(eligible, data[CACHE_KEY] || {});
     await ensureAutoScanEnabledAt(data);
-    els.autoScanStatus.textContent = autoScanStatusParts(data, scan).join(' / ');
+    const autoParts = autoScanStatusParts(data, scan);
+    if (data[AUTO_SCAN_ENABLED_KEY] === true) {
+      const runStateText = autoScanRunStateText(data[AUTO_SCAN_RUN_STATE_KEY]);
+      if (runStateText) autoParts.push(runStateText);
+    }
+    els.autoScanStatus.textContent = autoParts.join(' / ');
 
     await ensureBgProbeEnabledAt(data);
     const bgParts = bgProbeStatusParts(data);
-    bgParts.push(t('statusProgress', bgProgress(data[BG_PROBE_QUEUE_KEY] || {}, eligible.length), eligible.length));
-    bgParts.push(t('statusBreakdown', breakdown.next, breakdown.discount));
+    if (data[BG_PROBE_ENABLED_KEY] === true) {
+      const runStateText = bgRunStateText(data[BG_PROBE_RUN_STATE_KEY]);
+      if (runStateText) {
+        bgParts.push(runStateText);
+      } else {
+        bgParts.push(t('statusProgress', bgProgress(data[BG_PROBE_QUEUE_KEY] || {}, eligible.length), eligible.length));
+      }
+      bgParts.push(t('statusBreakdown', breakdown.next, breakdown.discount));
+    }
     els.bgProbeStatus.textContent = bgParts.join(' / ');
   }
 
@@ -284,7 +357,11 @@
 
   async function saveAutomationSetting(key, value) {
     const payload = { [key]: value };
-    if (key === AUTO_SCAN_ENABLED_KEY && value === true) payload[AUTO_SCAN_ENABLED_AT_KEY] = Date.now();
+    if (key === AUTO_SCAN_ENABLED_KEY && value === true) {
+      const enabledAt = Date.now();
+      payload[AUTO_SCAN_ENABLED_AT_KEY] = enabledAt;
+      payload[AUTO_SCAN_RUN_STATE_KEY] = { status: 'waiting', enabledAt };
+    }
     if (key === BG_PROBE_ENABLED_KEY && value === true) payload[BG_PROBE_ENABLED_AT_KEY] = Date.now();
     await chrome.storage.local.set(payload);
     await reconcileAlarms();
@@ -686,6 +763,7 @@
   if (els.topLink) els.topLink.addEventListener('click', scrollToTop);
 
   async function init() {
+    await ensureCatalogPriceVersion();
     const data = await chrome.storage.local.get([
       THEME_KEY,
       LANGUAGE_KEY,
@@ -726,11 +804,13 @@
         AUTO_SCAN_ENABLED_KEY,
         AUTO_SCAN_INTERVAL_KEY,
         AUTO_SCAN_LAST_ATTEMPT_KEY,
+        AUTO_SCAN_RUN_STATE_KEY,
         AUTO_SCAN_ENABLED_AT_KEY,
         BG_PROBE_ENABLED_KEY,
         BG_PROBE_INTERVAL_KEY,
         BG_PROBE_QUEUE_KEY,
         BG_PROBE_LAST_RUN_KEY,
+        BG_PROBE_RUN_STATE_KEY,
         BG_PROBE_ENABLED_AT_KEY,
       ];
       if (watched.some((key) => changes[key])) refreshAutomationStatus();

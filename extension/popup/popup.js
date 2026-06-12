@@ -6,6 +6,8 @@
   const card = window.__KST_CARD__;
   const i18n = window.__KST_I18N__;
   const CACHE_KEY = 'kstCatalogCache';
+  const CATALOG_PRICE_VERSION_KEY = 'kstCatalogPriceVersion';
+  const CATALOG_PRICE_VERSION = 7;
   const COMPLETED_KEY = 'kstCompletedSeries';
   const PRIORITY_KEY = 'kstPrioritySeries';
   const EXCLUDED_KEY = 'kstExcludedSeries';
@@ -13,10 +15,12 @@
   const AUTO_SCAN_ENABLED_KEY = 'kstAutoScanEnabled';
   const AUTO_SCAN_INTERVAL_KEY = 'kstAutoScanIntervalD';
   const AUTO_SCAN_LAST_ATTEMPT_KEY = 'kstAutoScanLastAttempt';
+  const AUTO_SCAN_RUN_STATE_KEY = 'kstAutoScanRunState';
   const AUTO_SCAN_ENABLED_AT_KEY = 'kstAutoScanEnabledAt';
   const BG_PROBE_ENABLED_KEY = 'kstBgProbeEnabled';
   const BG_PROBE_INTERVAL_KEY = 'kstBgProbeIntervalH';
   const BG_PROBE_LAST_RUN_KEY = 'kstBgProbeLastRunAt';
+  const BG_PROBE_RUN_STATE_KEY = 'kstBgProbeRunState';
   const BG_PROBE_ENABLED_AT_KEY = 'kstBgProbeEnabledAt';
   const THEME_KEY = 'kstTheme';
   const LANGUAGE_KEY = i18n.LANGUAGE_KEY;
@@ -39,6 +43,13 @@
   const checkSimpleBtn = document.getElementById('checkSimple');
   const langToggle = document.getElementById('langToggle');
   let currentScan = null;
+
+  async function ensureCatalogPriceVersion() {
+    const data = await chrome.storage.local.get(CATALOG_PRICE_VERSION_KEY);
+    if (data[CATALOG_PRICE_VERSION_KEY] === CATALOG_PRICE_VERSION) return;
+    await chrome.storage.local.remove(CACHE_KEY);
+    await chrome.storage.local.set({ [CATALOG_PRICE_VERSION_KEY]: CATALOG_PRICE_VERSION });
+  }
 
   function normalizeTheme(value) {
     return window.__KST_THEME__?.normalizeTheme(value)
@@ -131,12 +142,60 @@
     return lastNextText(lastRun, base, intervalMs);
   }
 
+  function autoScanRunStateText(value) {
+    if (!value || typeof value !== 'object') return '';
+    const checkedAt = formatStatusDate(value.checkedAt);
+    if (value.status === 'checking') return t('statusAutoChecking', checkedAt);
+    if (value.status === 'skipped-not-due') {
+      return t('statusAutoSkippedNotDue', checkedAt, formatStatusDate(value.nextDueAt));
+    }
+    if (value.status === 'skipped-no-baseline') {
+      return t('statusAutoSkippedNoBaseline', checkedAt);
+    }
+    if (value.status === 'running') {
+      return t(
+        'statusAutoRunning',
+        checkedAt,
+        Number(value.progressValue) || 0,
+        Number(value.progressMax) || 0
+      );
+    }
+    if (value.status === 'completed') {
+      return t(
+        'statusAutoCompleted',
+        checkedAt,
+        formatStatusDate(value.finishedAt),
+        Number(value.totalItems) || 0,
+        Number(value.addedItems) || 0
+      );
+    }
+    if (value.status === 'failed') {
+      return t('statusAutoFailed', checkedAt, formatStatusDate(value.finishedAt));
+    }
+    return '';
+  }
+
   function bgProbeStatusText(data) {
     if (data[BG_PROBE_ENABLED_KEY] !== true) return t('statusDisabled');
     const lastRun = Number(data[BG_PROBE_LAST_RUN_KEY]) || 0;
     const base = lastRun || (Number(data[BG_PROBE_ENABLED_AT_KEY]) || 0);
     const intervalMs = normalizeIntervalH(data[BG_PROBE_INTERVAL_KEY]) * 60 * 60000;
     return lastNextText(lastRun, base, intervalMs);
+  }
+
+  function bgRunStateText(value) {
+    if (!value || typeof value !== 'object') return '';
+    const total = Number(value.total) || 0;
+    const processed = Math.min(Number(value.processed) || 0, total);
+    const failed = Number(value.failed) || 0;
+    if (value.status === 'running') return t('statusRunRunning', processed, total, failed);
+    if (value.status === 'failed') {
+      return t('statusRunFailed', formatStatusDate(value.finishedAt), processed, total);
+    }
+    if (value.status === 'completed') {
+      return t('statusRunCompleted', formatStatusDate(value.finishedAt), total, failed);
+    }
+    return '';
   }
 
   function snapshotBreakdown(scan) {
@@ -152,18 +211,26 @@
       AUTO_SCAN_ENABLED_KEY,
       AUTO_SCAN_INTERVAL_KEY,
       AUTO_SCAN_LAST_ATTEMPT_KEY,
+      AUTO_SCAN_RUN_STATE_KEY,
       AUTO_SCAN_ENABLED_AT_KEY,
       BG_PROBE_ENABLED_KEY,
       BG_PROBE_INTERVAL_KEY,
       BG_PROBE_LAST_RUN_KEY,
+      BG_PROBE_RUN_STATE_KEY,
       BG_PROBE_ENABLED_AT_KEY,
     ]);
     await ensureAutoScanEnabledAt(data);
     await ensureBgProbeEnabledAt(data);
-    popupAutoScanStatus.textContent = autoScanStatusText(data, scan);
+    const autoRunStateText = autoScanRunStateText(data[AUTO_SCAN_RUN_STATE_KEY]);
+    popupAutoScanStatus.textContent = data[AUTO_SCAN_ENABLED_KEY] === true
+      ? [autoScanStatusText(data, scan), autoRunStateText].filter(Boolean).join(' / ')
+      : t('statusDisabled');
     const breakdown = snapshotBreakdown(scan);
+    const runStateText = bgRunStateText(data[BG_PROBE_RUN_STATE_KEY]);
     popupBgProbeStatus.textContent = data[BG_PROBE_ENABLED_KEY] === true
-      ? bgProbeStatusText(data) + ' / ' + t('statusBreakdown', breakdown.next, breakdown.discount)
+      ? [bgProbeStatusText(data), runStateText, t('statusBreakdown', breakdown.next, breakdown.discount)]
+          .filter(Boolean)
+          .join(' / ')
       : t('statusDisabled');
     setStatus(scan ? t('lastScan', formatScannedAt(scan.scannedAt)) : '');
   }
@@ -507,6 +574,7 @@
   document.getElementById('exportJson').addEventListener('click', () => exportBooks('json'));
 
   async function init() {
+    await ensureCatalogPriceVersion();
     if (chrome.action?.setBadgeText) chrome.action.setBadgeText({ text: '' });
     chrome.storage.local.set({ [BG_BADGE_COUNT_KEY]: 0 });
 
@@ -520,6 +588,33 @@
     applyThemeToDocument(theme);
 
     await refresh();
+  }
+
+  if (chrome.storage?.onChanged) {
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName !== 'local') return;
+      const watched = [
+        api.STORAGE_KEY,
+        AUTO_SCAN_ENABLED_KEY,
+        AUTO_SCAN_INTERVAL_KEY,
+        AUTO_SCAN_LAST_ATTEMPT_KEY,
+        AUTO_SCAN_RUN_STATE_KEY,
+        AUTO_SCAN_ENABLED_AT_KEY,
+        BG_PROBE_ENABLED_KEY,
+        BG_PROBE_INTERVAL_KEY,
+        BG_PROBE_LAST_RUN_KEY,
+        BG_PROBE_RUN_STATE_KEY,
+        BG_PROBE_ENABLED_AT_KEY,
+      ];
+      if (watched.some((key) => changes[key])) {
+        getLastScan()
+          .then((scan) => {
+            currentScan = scan;
+            return setPopupStatus(scan);
+          })
+          .catch((error) => console.warn('[KST] popup status refresh failed', error));
+      }
+    });
   }
 
   init();

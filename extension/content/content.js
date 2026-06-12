@@ -18,6 +18,7 @@
   const AUTO_SCAN_ENABLED_KEY = 'kstAutoScanEnabled';
   const AUTO_SCAN_INTERVAL_KEY = 'kstAutoScanIntervalD';
   const AUTO_SCAN_LAST_ATTEMPT_KEY = 'kstAutoScanLastAttempt';
+  const AUTO_SCAN_RUN_STATE_KEY = 'kstAutoScanRunState';
   // 各ソート順は1万件で頭打ちになる。異なる軸（取得日・タイトル・著者）×昇順/降順で
   // 取得して ASIN マージすると、それぞれ別の「先頭1万件」が見えるため壁を越えられる。
   // 取得日2軸だけなら最大2万件、6パスなら理論上6万件規模までカバーできる。
@@ -36,6 +37,7 @@
   // 「最初の既知1件」ではなく連続ランで判定する。
   const SIMPLE_KNOWN_RUN_STOP = 200;
   let silentAutoScan = false;
+  let autoScanRunState = null;
 
   function delay(ms) {
     return new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -106,14 +108,33 @@
   }
 
   async function saveProgress(value, max, status) {
-    await chrome.storage.local.set({
+    const payload = {
       [api.PROGRESS_KEY]: {
         value,
         max,
         status,
         updatedAt: Date.now(),
       },
-    });
+    };
+    if (silentAutoScan && autoScanRunState) {
+      autoScanRunState = {
+        ...autoScanRunState,
+        status: 'running',
+        progressValue: value,
+        progressMax: max,
+        updatedAt: Date.now(),
+      };
+      payload[AUTO_SCAN_RUN_STATE_KEY] = autoScanRunState;
+    }
+    await chrome.storage.local.set(payload);
+  }
+
+  async function saveAutoScanState(patch) {
+    autoScanRunState = {
+      ...(autoScanRunState || {}),
+      ...patch,
+    };
+    await chrome.storage.local.set({ [AUTO_SCAN_RUN_STATE_KEY]: autoScanRunState });
   }
 
   function isQuotaError(error) {
@@ -336,6 +357,7 @@
     let minimalBooks;
     let series;
     let addedNote = '';
+    let addedItems = null;
 
     if (mode === 'simple') {
       const existing = await readExistingScan();
@@ -350,6 +372,7 @@
       const merged = api.mergeScan(existingMinimal, newBooks);
       minimalBooks = merged.minimalBooks;
       series = preserveSeriesThumbnails(merged.series, existing.series, newBooks);
+      addedItems = merged.added;
       addedNote = t('addedBooks', merged.added);
     } else {
       const normalized = await collectAllBooks(csrfToken);
@@ -383,7 +406,7 @@
       showBanner(t('scanComplete'), detail);
       hideBannerSoon();
     }
-    return result;
+    return { ...result, addedItems };
   }
 
   // エクスポート用: 保存はせず、全件をフル書誌（title/authors 付き）で取得して返す。
@@ -406,22 +429,60 @@
       AUTO_SCAN_INTERVAL_KEY,
       api.STORAGE_KEY,
       AUTO_SCAN_LAST_ATTEMPT_KEY,
+      AUTO_SCAN_RUN_STATE_KEY,
     ]);
     if (!data[AUTO_SCAN_ENABLED_KEY]) return;
+
+    const checkedAt = Date.now();
+    autoScanRunState = data[AUTO_SCAN_RUN_STATE_KEY] || {};
+    await saveAutoScanState({ status: 'checking', checkedAt });
 
     const intervalD = Number(data[AUTO_SCAN_INTERVAL_KEY]) || 7;
     const scan = data[api.STORAGE_KEY] || null;
     const lastAttempt = Number(data[AUTO_SCAN_LAST_ATTEMPT_KEY]) || 0;
     const staleness = Math.max(Number(scan?.scannedAt) || 0, lastAttempt);
-    if (Date.now() - staleness < intervalD * 86400000) return;
+    const nextDueAt = staleness + intervalD * 86400000;
+    if (checkedAt < nextDueAt) {
+      await saveAutoScanState({
+        status: 'skipped-not-due',
+        checkedAt,
+        nextDueAt,
+      });
+      return;
+    }
 
-    if (!Array.isArray(scan?.items) || scan.items.length === 0) return;
+    if (!Array.isArray(scan?.items) || scan.items.length === 0) {
+      await saveAutoScanState({ status: 'skipped-no-baseline', checkedAt });
+      return;
+    }
 
-    await chrome.storage.local.set({ [AUTO_SCAN_LAST_ATTEMPT_KEY]: Date.now() });
+    const startedAt = Date.now();
+    await chrome.storage.local.set({ [AUTO_SCAN_LAST_ATTEMPT_KEY]: startedAt });
+    await saveAutoScanState({
+      status: 'running',
+      checkedAt,
+      startedAt,
+      progressValue: 0,
+      progressMax: 0,
+    });
     silentAutoScan = true;
     const mode = 'simple';
     try {
-      await collectKindleBooks(mode);
+      const result = await collectKindleBooks(mode);
+      await saveAutoScanState({
+        status: 'completed',
+        finishedAt: Date.now(),
+        totalItems: result.totalItems,
+        addedItems: Number(result.addedItems) || 0,
+        progressValue: result.totalItems,
+        progressMax: result.totalItems,
+      });
+    } catch (error) {
+      await saveAutoScanState({
+        status: 'failed',
+        finishedAt: Date.now(),
+      });
+      throw error;
     } finally {
       silentAutoScan = false;
     }

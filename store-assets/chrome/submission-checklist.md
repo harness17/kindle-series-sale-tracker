@@ -1,7 +1,7 @@
 # Chrome Web Store Submission Checklist
 
-- [ ] Upload `dist/chrome/kindle-series-sale-tracker-chrome-v0.1.0.zip`.
-- [ ] Confirm uploaded manifest shows version `0.1.0`.
+- [ ] Upload `dist/chrome/kindle-series-sale-tracker-chrome-v0.4.4.zip`.
+- [ ] Confirm uploaded manifest shows version `0.4.4`.
 - [ ] Store icon: upload/use `extension/icons/icon128.png`.
 - [ ] Upload screenshots:
   - `store-assets/chrome/screenshots/01-options-list-1280x800.png`

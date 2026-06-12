@@ -2,8 +2,8 @@
 
 ## Upload Package
 
-- Zip: `dist/firefox/kindle-series-sale-tracker-firefox-v0.4.0.zip`
-- Version: `0.4.0`
+- Zip: `dist/firefox/kindle-series-sale-tracker-firefox-v0.4.4.zip`
+- Version: `0.4.4`
 - Extension ID: `kindle-series-sale-tracker@harness`
 
 ## Graphic Assets
@@ -46,7 +46,7 @@ Features:
 • Japanese / English UI toggle
 • Opt-in background check for new volumes and sales (badge notification)
 • Opt-in auto-scan when visiting the Kindle library page
-• Automation status display — last/next run, new-volume and sale counts — in the sidebar and options page
+• Automation status display — trigger decisions, running/completed/failed state, skip reasons, and result counts — in the sidebar and options page
 
 Privacy:
 All scan results and settings are stored locally in your browser. No data is sent to any external server. Background checks also target only Amazon.co.jp pages, with results stored locally. Amazon credentials, cookies, and purchase history are never stored or transmitted.
@@ -57,16 +57,20 @@ This extension depends on Amazon.co.jp page structure. Changes on Amazon's side 
 This extension is designed for Amazon.co.jp (Japanese Kindle store) only.
 ```
 
-## Version Notes (0.4.0)
+## Version Notes (0.4.4)
 
 ```text
-Version 0.4.0
+Version 0.4.4
 
 New in this version:
-- Execution status display (last/next run, progress, new-volume & sale counts) for both automation features, in the sidebar and options page; collapsible and off by default
-- Background check now runs a catch-up on startup/update, so it stays reliable across extension reloads
-- Auto-scan now runs only the lightweight incremental fetch
+- Each scheduled background cycle checks every eligible series while retaining throttled batches
+- Background status now shows running/completed/stopped state, processed count, and failures
+- Auto-scan status now shows trigger decisions, not-due/no-baseline skips, progress, completion, and failure
+- Improved effective Kindle price calculation when Kindle Unlimited and coupons appear together
 - No new permissions
+
+Previous (0.4.0):
+- Added automation execution status, startup/update catch-up, and lightweight incremental auto-scan
 
 Previous (0.3.0):
 - Opt-in background check for new volumes and sales (badge notification)

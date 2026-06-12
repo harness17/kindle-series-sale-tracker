@@ -32,6 +32,7 @@
     const prevCache = message.prevCache || {};
     const newCache = {};
     let badgeCount = Number(message.currentBadgeCount) || 0;
+    let failedCount = 0;
     let isFirst = true;
 
     console.log('[KST] offscreen probe chunk: %d series', chunk.length);
@@ -53,17 +54,25 @@
           badgeCount += 1;
         }
       } catch (error) {
+        failedCount += 1;
         console.warn('[KST] background probe skipped', series?.key || series?.title, error);
       }
     }
 
+    const updatedQueue = nextQueue(message.queue || {}, chunk.length);
     await chrome.storage.local.set({
       [CACHE_KEY]: { ...prevCache, ...newCache },
-      [BG_PROBE_QUEUE_KEY]: nextQueue(message.queue || {}, chunk.length),
+      [BG_PROBE_QUEUE_KEY]: updatedQueue,
       [BG_BADGE_COUNT_KEY]: badgeCount,
     });
 
-    return { done: true, badgeCount };
+    return {
+      done: true,
+      badgeCount,
+      cacheEntries: newCache,
+      failedCount,
+      queue: updatedQueue,
+    };
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {

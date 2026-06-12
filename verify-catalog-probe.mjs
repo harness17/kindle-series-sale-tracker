@@ -2,6 +2,7 @@ import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
 const {
+  PRICE_CALC_VERSION,
   detectNextVolume,
   extractSearchResultOffer,
   normalizePublicationDate,
@@ -155,6 +156,294 @@ const checks = [
       };
       const offer = extractSearchResultOffer(node);
       return offer.priceText === '￥1,280' && offer.listPriceText === '' && offer.discountRate === null;
+    })(),
+  },
+  {
+    name: 'KU＋円額クーポン併存: 円額を優先して適用後の実金額(￥531)を返す',
+    ok: (() => {
+      const node = {
+        textContent:
+          'Kindle Unlimited ￥0 ￥228オフクーポンが適用されました 30%OFF ￥759で購入',
+        querySelector(selector) {
+          if (selector.includes('s-coupon-component'))
+            return { textContent: '￥228オフクーポンが適用されました' };
+          if (selector.includes('a-text-price') || selector.includes('a-text-strike'))
+            return null;
+          if (
+            selector.includes(':not') ||
+            selector.includes('data-a-color') ||
+            selector.includes('.a-price')
+          )
+            return { textContent: '￥0' };
+          return null;
+        },
+        querySelectorAll(selector) {
+          if (selector.includes('a-text-price') || selector.includes('a-text-strike')) return [];
+          if (selector.includes('.a-price')) return [{ textContent: '￥0' }];
+          return [];
+        },
+        cloneNode() {
+          let couponRemoved = false;
+          return {
+            get textContent() {
+              return couponRemoved
+                ? 'Kindle Unlimited ￥0 30%OFF ￥759で購入'
+                : 'Kindle Unlimited ￥0 ￥228オフクーポンが適用されました 30%OFF ￥759で購入';
+            },
+            querySelectorAll(sel) {
+              if (sel.includes('s-coupon-component')) {
+                return couponRemoved
+                  ? []
+                  : [{ remove() { couponRemoved = true; } }];
+              }
+              return [];
+            },
+          };
+        },
+      };
+      const offer = extractSearchResultOffer(node);
+      return offer.priceText === '￥531' && offer.discountRate === 30;
+    })(),
+  },
+  {
+    name: 'KU＋割合クーポン併存: エアマスター相当の￥759・30%OFFを￥531にする',
+    ok: (() => {
+      const node = {
+        textContent: 'Kindle Unlimited ￥0 30% OFF クーポンあり または、￥759で購入',
+        querySelector(selector) {
+          if (selector.includes('s-coupon-component'))
+            return { textContent: '30% OFF クーポンあり' };
+          if (selector.includes('a-text-price') || selector.includes('a-text-strike'))
+            return null;
+          if (
+            selector.includes(':not') ||
+            selector.includes('data-a-color') ||
+            selector.includes('.a-price')
+          )
+            return { textContent: '￥0' };
+          return null;
+        },
+        querySelectorAll(selector) {
+          if (selector.includes('a-text-price') || selector.includes('a-text-strike')) return [];
+          if (selector.includes('.a-price')) return [{ textContent: '￥0' }];
+          return [];
+        },
+        cloneNode() {
+          let couponRemoved = false;
+          return {
+            get textContent() {
+              return couponRemoved
+                ? 'Kindle Unlimited ￥0 または、￥759で購入'
+                : 'Kindle Unlimited ￥0 30% OFF クーポンあり または、￥759で購入';
+            },
+            querySelectorAll(sel) {
+              if (sel.includes('s-coupon-component')) {
+                return couponRemoved
+                  ? []
+                  : [{ remove() { couponRemoved = true; } }];
+              }
+              return [];
+            },
+          };
+        },
+      };
+      const offer = extractSearchResultOffer(node);
+      return (
+        offer.priceText === '￥531' &&
+        offer.discountRate === 30 &&
+        offer.priceCalcVersion === PRICE_CALC_VERSION
+      );
+    })(),
+  },
+  {
+    name: '同じ続刊が複数ある場合は実効価格が安い候補を採用する',
+    ok: (() => {
+      const r = detectNextVolume(
+        [
+          {
+            title: 'エアマスター 2 (ジェッツコミックス)',
+            url: 'base-price',
+            priceText: '￥759',
+            discountRate: 30,
+            priceCalcVersion: PRICE_CALC_VERSION,
+          },
+          {
+            title: 'エアマスター 2 (ジェッツコミックス)',
+            url: 'coupon-price',
+            priceText: '￥531',
+            discountRate: 30,
+            priceCalcVersion: PRICE_CALC_VERSION,
+          },
+        ],
+        { seriesTitle: 'エアマスター', highestVolume: 1 }
+      );
+      return (
+        r.status === 'has-next' &&
+        r.nextVolume === 2 &&
+        r.nextUrl === 'coupon-price' &&
+        r.nextPriceText === '￥531' &&
+        r.nextPriceCalcVersion === PRICE_CALC_VERSION
+      );
+    })(),
+  },
+  {
+    name: 'fetch初期HTMLで親component属性がなくても表示クラスから30%クーポンを適用する',
+    ok: (() => {
+      const node = {
+        textContent: 'Kindle Unlimited ￥0 30% OFF クーポンあり または、￥759で購入',
+        querySelector(selector) {
+          if (selector.includes('s-coupon-unclipped'))
+            return { textContent: '30% OFF クーポンあり' };
+          if (selector.includes('a-text-price') || selector.includes('a-text-strike'))
+            return null;
+          if (
+            selector.includes(':not') ||
+            selector.includes('data-a-color') ||
+            selector.includes('.a-price')
+          )
+            return { textContent: '￥0' };
+          return null;
+        },
+        querySelectorAll(selector) {
+          if (selector.includes('a-text-price') || selector.includes('a-text-strike')) return [];
+          if (selector.includes('.a-price')) return [{ textContent: '￥0' }];
+          return [];
+        },
+        cloneNode() {
+          let couponRemoved = false;
+          return {
+            get textContent() {
+              return couponRemoved
+                ? 'Kindle Unlimited ￥0 または、￥759で購入'
+                : 'Kindle Unlimited ￥0 30% OFF クーポンあり または、￥759で購入';
+            },
+            querySelectorAll(sel) {
+              if (sel.includes('s-coupon-unclipped')) {
+                return couponRemoved
+                  ? []
+                  : [{ remove() { couponRemoved = true; } }];
+              }
+              return [];
+            },
+          };
+        },
+      };
+      const offer = extractSearchResultOffer(node);
+      return offer.priceText === '￥531' && offer.discountRate === 30;
+    })(),
+  },
+  {
+    name: 'fetch初期HTMLでクーポン文言が欠けてもKU購入価格へ30%OFFを適用する',
+    ok: (() => {
+      const node = {
+        textContent: 'Kindle Unlimited ￥0 30% OFF または、￥759で購入',
+        querySelector(selector) {
+          if (selector.includes('a-text-price') || selector.includes('a-text-strike')) return null;
+          if (
+            selector.includes(':not') ||
+            selector.includes('data-a-color') ||
+            selector.includes('.a-price')
+          )
+            return { textContent: '￥0' };
+          return null;
+        },
+        querySelectorAll(selector) {
+          if (selector.includes('a-text-price') || selector.includes('a-text-strike')) return [];
+          if (selector.includes('.a-price')) return [{ textContent: '￥0' }];
+          return [];
+        },
+      };
+      const offer = extractSearchResultOffer(node);
+      return (
+        offer.priceText === '￥531' &&
+        offer.discountRate === 30 &&
+        offer.priceCalcVersion === PRICE_CALC_VERSION
+      );
+    })(),
+  },
+  {
+    name: 'クーポン用DOM属性やクラスがなくても本文のクーポン明示から30%を価格へ適用する',
+    ok: (() => {
+      const node = {
+        textContent: 'Kindle Unlimited ￥0 30% OFF クーポンあり または、￥759で購入',
+        querySelector(selector) {
+          if (selector.includes('s-coupon')) return null;
+          if (selector.includes('a-text-price') || selector.includes('a-text-strike'))
+            return null;
+          if (
+            selector.includes(':not') ||
+            selector.includes('data-a-color') ||
+            selector.includes('.a-price')
+          )
+            return { textContent: '￥0' };
+          return null;
+        },
+        querySelectorAll(selector) {
+          if (selector.includes('a-text-price') || selector.includes('a-text-strike')) return [];
+          if (selector.includes('.a-price')) return [{ textContent: '￥0' }];
+          return [];
+        },
+        cloneNode() {
+          return {
+            textContent: 'Kindle Unlimited ￥0 30% OFF クーポンあり または、￥759で購入',
+            querySelectorAll() {
+              return [];
+            },
+          };
+        },
+      };
+      const offer = extractSearchResultOffer(node);
+      return offer.priceText === '￥531' && offer.discountRate === 30;
+    })(),
+  },
+  {
+    name: '先頭4000文字より後ろのクーポン明示も価格へ適用する',
+    ok: (() => {
+      const prefix = 'x'.repeat(4100);
+      const node = {
+        textContent: `${prefix} Kindle Unlimited ￥0 30% OFF クーポンあり または、￥759で購入`,
+        querySelector(selector) {
+          if (selector.includes('s-coupon')) return null;
+          if (selector.includes('a-text-price') || selector.includes('a-text-strike'))
+            return null;
+          if (
+            selector.includes(':not') ||
+            selector.includes('data-a-color') ||
+            selector.includes('.a-price')
+          )
+            return { textContent: '￥759' };
+          return null;
+        },
+        querySelectorAll(selector) {
+          if (selector.includes('a-text-price') || selector.includes('a-text-strike')) return [];
+          if (selector.includes('.a-price')) return [{ textContent: '￥759' }];
+          return [];
+        },
+        cloneNode() {
+          return {
+            textContent: `${prefix} Kindle Unlimited ￥0 30% OFF クーポンあり または、￥759で購入`,
+            querySelectorAll() {
+              return [];
+            },
+          };
+        },
+      };
+      const offer = extractSearchResultOffer(node);
+      return offer.priceText === '￥531' && offer.discountRate === 30;
+    })(),
+  },
+  {
+    name: '割合表記があってもクーポン要素でなければ価格を変更しない',
+    ok: (() => {
+      const node = {
+        textContent: 'Kindle版 ￥759 30%OFF',
+        querySelector(selector) {
+          if (selector.includes(':not')) return { textContent: '￥759' };
+          return null;
+        },
+      };
+      const offer = extractSearchResultOffer(node);
+      return offer.priceText === '￥759' && offer.discountRate === 30;
     })(),
   },
   {

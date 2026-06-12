@@ -25,15 +25,21 @@
   function resolvePrimaryOffer(cached) {
     // stale（要再確認）は next 巻を既に所持しているため、購入オファーとして出さない。
     if (!cached || cached.status !== 'has-next' || cached.stale) return null;
+    const catalog =
+      typeof globalThis !== 'undefined' ? globalThis.__KST_CATALOG__ : null;
+    const priceVersionMatches =
+      !catalog ||
+      !catalog.PRICE_CALC_VERSION ||
+      cached.nextPriceCalcVersion === catalog.PRICE_CALC_VERSION;
     return {
       volume: cached.nextVolume,
       title: cached.nextTitle,
       url: cached.nextUrl,
       releaseDate: cached.nextReleaseDate,
       thumbnailUrl: cached.nextThumbnailUrl,
-      priceText: cached.nextPriceText,
-      listPriceText: cached.nextListPriceText,
-      discountRate: cached.nextDiscountRate || null,
+      priceText: priceVersionMatches ? cached.nextPriceText : '',
+      listPriceText: priceVersionMatches ? cached.nextListPriceText : '',
+      discountRate: priceVersionMatches ? cached.nextDiscountRate || null : null,
       isNext: true,
     };
   }

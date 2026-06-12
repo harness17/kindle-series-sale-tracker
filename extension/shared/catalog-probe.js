@@ -7,6 +7,8 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function (kdl) {
   'use strict';
 
+  const PRICE_CALC_VERSION = 7;
+
   // 同一シリーズ判定は正規化 seriesKey の完全一致のみ。
   // 部分一致にすると「小林さんちのメイドラゴン」が「…エルマのＯＬ日記」等の
   // スピンオフを同一シリーズと誤判定して続刊照合がごっちゃになるため避ける。
@@ -105,18 +107,28 @@
   // タイトルに「20%OFF」などが含まれる商品名を、割引率として誤検出しないため除外する。
   const TITLE_EXCLUDE_SELECTOR =
     'h2 a, h2 span, h3 a, .a-size-medium.a-text-normal, .a-size-base-plus, [data-cy="title-recipe"]';
+  const COUPON_SELECTOR =
+    '[data-component-type="s-coupon-component"], .s-coupon-clipped, .s-coupon-unclipped';
 
   function collectSignalText(node, options) {
     if (!node) return '';
     const excludeTitles = !!(options && options.excludeTitles);
+    const excludeCoupons = !!(options && options.excludeCoupons);
     let scope = node;
-    if (excludeTitles && typeof node.cloneNode === 'function') {
+    if ((excludeTitles || excludeCoupons) && typeof node.cloneNode === 'function') {
       scope = node.cloneNode(true);
       if (scope && typeof scope.querySelectorAll === 'function') {
-        scope.querySelectorAll(TITLE_EXCLUDE_SELECTOR).forEach((el) => {
-          if (typeof el.removeAttribute === 'function') el.removeAttribute('title');
-          if (typeof el.remove === 'function') el.remove();
-        });
+        if (excludeTitles) {
+          scope.querySelectorAll(TITLE_EXCLUDE_SELECTOR).forEach((el) => {
+            if (typeof el.removeAttribute === 'function') el.removeAttribute('title');
+            if (typeof el.remove === 'function') el.remove();
+          });
+        }
+        if (excludeCoupons) {
+          scope.querySelectorAll(COUPON_SELECTOR).forEach((el) => {
+            if (typeof el.remove === 'function') el.remove();
+          });
+        }
       }
     }
 
@@ -163,7 +175,7 @@
     const domPrices = queryTexts(node, selectors)
       .map((text) => parseYenPrice(text))
       .filter((price) => price !== null);
-    const signalText = collectSignalText(node, { excludeTitles: true });
+    const signalText = collectSignalText(node, { excludeTitles: true, excludeCoupons: true });
     const hasKindleUnlimited = /Kindle\s*Unlimited|読み放題/i.test(signalText);
     const prices = hasKindleUnlimited ? [...domPrices, ...parseYenPrices(signalText)] : domPrices;
     if (prices.length === 0) return '';
@@ -189,10 +201,47 @@
       '.a-text-strike .a-offscreen',
       '.a-text-strike',
     ]);
-    const price = parseYenPrice(priceText);
+    let price = parseYenPrice(priceText);
     const listPrice = parseYenPrice(listPriceText);
     const signalText = collectSignalText(node, { excludeTitles: true });
-    const textDiscount = parseDiscountRate(signalText);
+    const fullCardText = node.textContent || '';
+    const hasKindleUnlimited = /Kindle\s*Unlimited|読み放題/i.test(signalText);
+    let couponApplied = false;
+    if (price !== null && typeof node.querySelector === 'function') {
+      const couponEl = node.querySelector(COUPON_SELECTOR);
+      const couponText =
+        (couponEl && couponEl.textContent) ||
+        (/クーポン(?:あり|が適用されました)/.test(fullCardText) ? fullCardText : '');
+      if (couponText) {
+        const couponAmount = parseYenPrice(couponText);
+        if (couponAmount !== null && couponAmount > 0 && couponAmount < price) {
+          price -= couponAmount;
+          couponApplied = true;
+        } else {
+          const couponRate = parseDiscountRate(couponText);
+          if (couponRate !== null) {
+            price = Math.round(price * (1 - couponRate / 100));
+            couponApplied = true;
+          }
+        }
+      }
+    }
+    const textDiscount =
+      parseDiscountRate(signalText) ||
+      (/クーポン(?:あり|が適用されました)/.test(fullCardText)
+        ? parseDiscountRate(fullCardText)
+        : null);
+    // fetchしたAmazon初期HTMLではクーポン用クラス・文言が落ち、割引率だけ残ることがある。
+    // KUの0円とは別に示される購入価格に限り、タイトル外の割引率をクーポンとして適用する。
+    if (
+      price !== null &&
+      !couponApplied &&
+      listPrice === null &&
+      hasKindleUnlimited &&
+      textDiscount !== null
+    ) {
+      price = Math.round(price * (1 - textDiscount / 100));
+    }
     const computedDiscount =
       price !== null && listPrice !== null && listPrice > price
         ? Math.round(((listPrice - price) / listPrice) * 100)
@@ -202,7 +251,29 @@
       priceText: price !== null ? yenText(price) : '',
       listPriceText: listPrice !== null && listPrice !== price ? yenText(listPrice) : '',
       discountRate: discountRate || null,
+      priceCalcVersion: PRICE_CALC_VERSION,
     };
+  }
+
+  function catalogEntry(r, volume) {
+    return {
+      volume,
+      title: r.title,
+      url: r.url,
+      releaseDate: r.releaseDate || '',
+      thumbnailUrl: r.thumbnailUrl || '',
+      priceText: r.priceText || '',
+      listPriceText: r.listPriceText || '',
+      discountRate: r.discountRate || null,
+      priceCalcVersion: r.priceCalcVersion || null,
+    };
+  }
+
+  function shouldPreferCandidate(current, candidate) {
+    if (!current) return true;
+    const currentPrice = parseYenPrice(current.priceText || '');
+    const candidatePrice = parseYenPrice(candidate.priceText || '');
+    return candidatePrice !== null && (currentPrice === null || candidatePrice < currentPrice);
   }
 
   // 検索結果 [{title,url}] から、同一シリーズで highestVolume より先の最小巻を探す。
@@ -238,30 +309,21 @@
       // 別エディション（別レーベルの新装版／単話・分冊版）は続刊として出さない。
       if (isSplitVolumeEdition(r.title)) continue;
       if (isDifferentImprint(ownedImprint, parsed.imprint)) continue;
-      if (latest === null || parsed.volume > latest.volume) {
-        latest = {
-          volume: parsed.volume,
-          title: r.title,
-          url: r.url,
-          releaseDate: r.releaseDate || '',
-          thumbnailUrl: r.thumbnailUrl || '',
-          priceText: r.priceText || '',
-          listPriceText: r.listPriceText || '',
-          discountRate: r.discountRate || null,
-        };
+      const candidate = catalogEntry(r, parsed.volume);
+      if (
+        latest === null ||
+        parsed.volume > latest.volume ||
+        (parsed.volume === latest.volume && shouldPreferCandidate(latest, candidate))
+      ) {
+        latest = candidate;
       }
       if (parsed.volume <= highestVolume) continue;
-      if (best === null || parsed.volume < best.volume) {
-        best = {
-          volume: parsed.volume,
-          title: r.title,
-          url: r.url,
-          releaseDate: r.releaseDate || '',
-          thumbnailUrl: r.thumbnailUrl || '',
-          priceText: r.priceText || '',
-          listPriceText: r.listPriceText || '',
-          discountRate: r.discountRate || null,
-        };
+      if (
+        best === null ||
+        parsed.volume < best.volume ||
+        (parsed.volume === best.volume && shouldPreferCandidate(best, candidate))
+      ) {
+        best = candidate;
       }
       const candidatePrice = parseYenPrice(r.priceText || '');
       const existing = unownedByVolume.get(parsed.volume);
@@ -295,6 +357,7 @@
         nextPriceText: best.priceText || '',
         nextListPriceText: best.listPriceText || '',
         nextDiscountRate: best.discountRate || null,
+        nextPriceCalcVersion: best.priceCalcVersion || null,
         latestVolume: latest?.volume ?? best.volume,
         latestTitle: latest?.title ?? best.title,
         latestUrl: latest?.url ?? best.url,
@@ -303,6 +366,7 @@
         latestPriceText: latest?.priceText || '',
         latestListPriceText: latest?.listPriceText || '',
         latestDiscountRate: latest?.discountRate || null,
+        latestPriceCalcVersion: latest?.priceCalcVersion || null,
         completionCost: completionFoundCount > 0 ? completionCost : null,
         completionFoundCount,
         completionExpectedSpan,
@@ -319,6 +383,7 @@
           latestPriceText: latest.priceText || '',
           latestListPriceText: latest.listPriceText || '',
           latestDiscountRate: latest.discountRate || null,
+          latestPriceCalcVersion: latest.priceCalcVersion || null,
         }
       : { status: 'no-next' };
   }
@@ -359,6 +424,7 @@
   }
 
   return {
+    PRICE_CALC_VERSION,
     detectNextVolume,
     extractSearchResultOffer,
     normalizePublicationDate,
