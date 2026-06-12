@@ -13,9 +13,16 @@ Thank you for reviewing Kindle Series Sale Tracker v0.4.4.
 --- Changes in v0.4.4 ---
 
 Each scheduled background cycle now checks every eligible series in throttled
-batches. The sidebar/options page shows background progress and failures, plus
-auto-scan trigger decisions, skip reasons, progress, completion, and failure.
-Kindle Unlimited + coupon price parsing is also improved. No new permissions.
+batches of up to 8 series. The batch size is only a request-throttling unit, not
+a per-cycle limit: one alarm cycle continues until all eligible series have been
+processed. Overlapping alarm events share the active run and do not start a
+duplicate scan.
+
+The sidebar and options page now show trigger/running/completed/failed states,
+processed/total/failed counts, and result counts. Auto-scan also records whether
+it ran or was skipped because the interval was not due or no baseline library
+data existed. Kindle Unlimited + coupon price parsing is improved. No new
+permissions are requested.
 
 --- Purpose ---
 
@@ -28,6 +35,9 @@ No eval(), no new Function(), no remote scripts. Amazon HTML parsed via DOMParse
 as data only. Two opt-in automation features (disabled by default): background
 follow-up check (chrome.alarms, 12-48h interval) and auto-scan on library page
 visit (3-14 day cooldown). Execution status shown in sidebar/options page.
+
+Firefox performs background search-result parsing directly in the non-persistent
+background script. It does not request or use Chrome's offscreen permission.
 
 --- Network access (Amazon.co.jp only) ---
 
@@ -51,8 +61,19 @@ uses reviewer's own session, credentials never collected).
 2. Open amazon.co.jp/hz/mycd/digital-console/contentlist/booksAll/dateDsc/
 3. Click "全件取得" (Scan Library)
 4. Click "再確認" (Check) on any series
-5. Open "専用ページ" → "自動化" to test opt-in automation
-6. JA/EN toggle in sidebar header
+5. Open "専用ページ" → "自動化"
+6. Enable the background check and auto-scan options. The status area immediately
+   shows enabled state and the next scheduled time.
+7. A scheduled background cycle shows running progress as processed/total, then
+   completed or failed status. It checks all eligible series, including libraries
+   with more than 8 series.
+8. Auto-scan is evaluated when the Kindle library page is visited. Its status
+   records checking, running, completed, failed, or the exact skip reason.
+9. Use the JA/EN toggle in the sidebar header to test both UI languages.
+
+The minimum background interval is 12 hours and the minimum auto-scan interval is
+3 days. Reviewers do not need to wait for these timers to verify manual library
+and follow-up checks; the automation status UI exposes the configured next run.
 
 Source: https://github.com/harness17/kindle-series-sale-tracker (MIT)
 ```

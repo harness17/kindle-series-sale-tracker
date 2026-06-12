@@ -39,6 +39,7 @@ Features:
 • Scan your Kindle library from the Amazon.co.jp digital console with one click
 • Automatically detect series and estimate owned volume ranges
 • Check next-volume availability with price, discount rate, and release date
+• Determine the effective purchase price when Kindle Unlimited and coupons are shown together
 • Estimate the total cost to complete an unfinished series
 • Mark series as completed, priority, or excluded
 • Export your series list as CSV or JSON
@@ -65,7 +66,7 @@ Version 0.4.4
 
 New in this version:
 - Each scheduled background cycle checks every eligible series while retaining throttled batches
-- Background status now shows running/completed/stopped state, processed count, and failures
+- Background status now shows running/completed/failed state, processed count, and failures
 - Auto-scan status now shows trigger decisions, not-due/no-baseline skips, progress, completion, and failure
 - Improved effective Kindle price calculation when Kindle Unlimited and coupons appear together
 - No new permissions
@@ -146,11 +147,15 @@ Review steps:
 5. On the Kindle library page, click the full scan or quick update button.
 6. After the scan completes, open the sidebar or dedicated page to view series candidates.
 7. Click the follow-up check button to fetch Amazon.co.jp search results and show next-volume information.
-8. Open the dedicated options page and scroll to the "Automation" section. Enable "Check next volumes and sales in the background" and "Auto-scan when visiting the Kindle library" to test opt-in automation features.
+8. Open the dedicated options page and scroll to the "Automation" section. Enable "Check next volumes and sales in the background" and "Auto-scan when visiting the Kindle library".
+9. Confirm that the status area shows the enabled state and next scheduled time. During a scheduled background run it shows running progress, processed/total/failed counts, and completed or failed state. One scheduled cycle checks all eligible series; groups of 8 are internal throttled batches, not a per-cycle limit.
+10. Revisit the Kindle library page to evaluate auto-scan. The status area records checking, running, completed, failed, or a skip reason such as interval not due or no baseline data.
 
 No test account is provided because the extension only works with the reviewer's own Amazon.co.jp browser session. The extension does not collect or transmit Amazon credentials.
 
 The UI language can be toggled between Japanese and English using the language button in the sidebar header.
+
+Firefox parses background Amazon search results directly in its non-persistent background script and does not use or request the Chrome-only offscreen permission.
 
 The extension stores scan results only in browser extension storage. It does not operate a backend server and does not send Kindle library data to the developer.
 ```
