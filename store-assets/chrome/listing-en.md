@@ -43,6 +43,7 @@ Features:
 • Export your series list as CSV or JSON
 • Sidebar panel and dedicated options page
 • Opt-in background check for new volumes and sales (badge notification)
+• Each scheduled background cycle checks every eligible series in throttled batches of eight
 • Opt-in auto-scan when visiting the Kindle library page
 • Automation status display — trigger decisions, running/completed/failed state, skip reasons, and result counts — in the sidebar and options page
 
