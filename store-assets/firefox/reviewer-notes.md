@@ -8,19 +8,24 @@ Copy the text block below verbatim into the submission form.
 ## Submission text (copy as-is)
 
 ```text
-Thank you for reviewing Kindle Series Sale Tracker v0.4.4.
+Thank you for reviewing Kindle Series Sale Tracker v0.5.0.
 
---- Changes in v0.4.4 ---
+--- Changes in v0.5.0 ---
 
-Each scheduled background cycle now checks every eligible series in throttled
-batches of up to 8 series. The batch size is only a request-throttling unit, not
-a per-cycle limit. One alarm cycle continues until all eligible series have been
-processed. Overlapping alarms do not start duplicate scans.
+Badge detail: when the background check finds new sequels or sales, the sidebar
+now shows which specific series triggered the notification. Notified series sort
+to the top and display "NEW sequel" / "NEW sale" badges until the panel is opened.
 
-The sidebar/options page shows trigger, running, completed, failed, processed,
-total, and failure information. Auto-scan records runs and skip reasons such as
-interval not due or no baseline data. Kindle Unlimited + coupon price parsing is
-improved. No new permissions.
+Probe run history: the options page shows the last 20 background check results
+(completed, failed, interrupted). Interrupted runs from background script restarts
+are detected and recorded on wake.
+
+Auto-scan display fix: the sidebar and options page now use consistent staleness
+logic for the last-run / next-due display.
+
+UI: reorganized controls into a collapsible panel; added CSV export range option.
+
+No new permissions. No new external network access.
 
 --- Purpose ---
 
@@ -65,7 +70,8 @@ the extension uses the reviewer's session and never collects credentials.
    completed or failed status. It checks all eligible series, even above 8.
 8. Auto-scan is evaluated when the Kindle library page is visited. Its status
    records checking, running, completed, failed, or the exact skip reason.
-9. Use the JA/EN toggle in the sidebar header to test both UI languages.
+9. The background check history section shows the last 20 run results.
+10. Use the JA/EN toggle in the sidebar header to test both UI languages.
 
 The minimum background interval is 12 hours and the minimum auto-scan interval is
 3 days. Manual library and follow-up checks can be tested without waiting.
@@ -84,8 +90,8 @@ Source: https://github.com/harness17/kindle-series-sale-tracker (MIT)
 
 ## Checklist before submitting
 
-- [ ] The submitted ZIP matches the source at the commit tagged `v0.4.4`
-- [ ] `manifest.json` version field reads `0.4.4`
+- [ ] The submitted ZIP matches the source at the commit tagged `v0.5.0`
+- [ ] `manifest.json` version field reads `0.5.0`
 - [ ] No `CLAUDE_CODE_HANDOFF.md` or personal data files in the ZIP (excluded by build script)
 - [ ] `data_collection_permissions.required` is `["none"]` in `browser_specific_settings`
 - [ ] Source URL in the notes matches the public GitHub repository

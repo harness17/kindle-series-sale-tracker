@@ -17,36 +17,26 @@ This extension helps users of Amazon.co.jp's Kindle store organize their purchas
 books into series, check whether follow-up volumes exist, and see prices and
 discounts — all locally in the browser, with no external server.
 
---- Source code layout ---
+--- Changes in v0.5.0 ---
 
-extension/
-  background/background.js     — Service worker. Opens the side panel and runs the
-                                   opt-in scheduled follow-up check in throttled batches.
-  content/content.js           — Content script. Runs only on:
-                                   https://www.amazon.co.jp/hz/mycd/digital-console/
-                                   contentlist/booksAll*
-                                 On explicit user action, calls Amazon's own internal
-                                 Ajax endpoint (/hz/mycd/digital-console/ajax) to
-                                 read the user's Kindle library titles, authors, and
-                                 ASINs. Sends the parsed result to the side panel via
-                                 chrome.runtime.sendMessage. Does NOT read cookies
-                                 or credentials directly.
-  shared/kindle-library.js     — Pure functions: parse Ajax response, normalize
-                                   series title and volume number from book titles.
-  shared/catalog-probe.js      — Pure functions: detect next unowned volume from
-                                   Amazon search result HTML (parsed as a document,
-                                   not executed).
-  shared/series-card.js        — DOM rendering helpers for series cards. No network.
-  shared/i18n.js               — Client-side ja/en text strings. No network.
-  shared/theme-init.js         — Reads chrome.storage.local for theme preference.
-  popup/popup.js + popup.html  — Side panel UI. On user action, fetches Amazon search
-                                   result pages via fetch() with credentials:'include'
-                                   to check follow-up volumes. Parsed as document
-                                   content only, never eval'd.
-  options/options.js            — Dedicated options page. Same data, no extra network.
+Background follow-up check stability: fixed a crash when the offscreen document
+attempted to use chrome.storage (unavailable in offscreen context). Storage writes
+now happen in the service worker after each batch response.
 
-No eval(), no new Function(), no remote script loading, no CDN, no external server.
-All bundled assets are static files inside the submitted ZIP.
+Badge detail: when the background check finds new sequels or sales, the side panel
+now shows which specific series triggered the notification. Notified series sort to
+the top and display "NEW sequel" / "NEW sale" badges until the panel is opened.
+
+Probe run history: the options page shows the last 20 background check results
+(completed, failed, interrupted). Interrupted runs from service worker restarts are
+detected and recorded on wake.
+
+Auto-scan display fix: the side panel and options page now use consistent staleness
+logic for the last-run / next-due display.
+
+UI: reorganized controls into a collapsible panel; added CSV export range option.
+
+No new permissions. No new external network access.
 
 --- Network access ---
 
@@ -69,29 +59,14 @@ Two fetch patterns, triggered by user action or the corresponding opt-in automat
 
 No other domains are contacted. No analytics, no telemetry.
 
---- Data storage ---
+--- Technical summary ---
 
-All data is stored in chrome.storage.local:
-  - Library scan results (series candidates, volume ranges)
-  - Follow-up check cache (next volume info, prices)
-  - UI settings (theme, language, sort order)
-  - Per-series flags (priority, completed, excluded)
+No eval(), no new Function(), no remote script loading, no CDN, no external server.
+All bundled assets are static files inside the submitted ZIP.
 
-Nothing is uploaded to any server. amazon.co.jp session cookies are used only to
-authenticate the in-browser fetch requests and are never read, stored, or forwarded.
-
---- Why the broad host permission ---
-
-The manifest declares:
-  "host_permissions": ["https://www.amazon.co.jp/*"]
-
-Reason: two distinct Amazon.co.jp URL patterns are accessed at runtime:
-  1. /hz/mycd/digital-console/ajax (library data)
-  2. /s?k=...&i=digital-text&page=N (search results for follow-up checks)
-     and occasional supplemental search patterns
-
-The content script itself is narrowly scoped to:
-  "matches": ["https://www.amazon.co.jp/hz/mycd/digital-console/contentlist/booksAll*"]
+Chrome uses an offscreen document solely for DOMParser access (service workers
+lack DOM APIs). The offscreen document communicates only via chrome.runtime
+messaging — it does not use chrome.storage or other extension APIs.
 
 --- How to test ---
 
@@ -110,6 +85,7 @@ Steps:
 6. To switch the UI to English, click the "JA/EN" toggle in the side panel header.
 7. In "専用ページ" / the options page, enable either automation feature and
    review its trigger, running, completed, failed, or skipped status.
+8. The background check history section shows the last 20 run results.
 
 --- Source availability ---
 
@@ -127,8 +103,8 @@ License: MIT
 
 ## Checklist before submitting
 
-- [ ] The submitted ZIP matches the source at the commit tagged `v0.4.4`
-- [ ] `manifest.json` version field reads `0.4.4`
+- [ ] The submitted ZIP matches the source at the commit tagged `v0.5.0`
+- [ ] `manifest.json` version field reads `0.5.0`
 - [ ] No `CLAUDE_CODE_HANDOFF.md` or personal data files in the ZIP (verified by build script)
 - [ ] Host permission justification text in listing-en.md is copied to the Privacy tab
 - [ ] "Remote code usage" is set to No
