@@ -588,6 +588,25 @@
     return rows.map((row) => row.map(csvEscape).join(',')).join('\n');
   }
 
+  function selectRecentBooks(items, limit) {
+    const count = Number(limit);
+    if (!Number.isInteger(count) || count <= 0) return Array.from(items || []);
+
+    return Array.from(items || [])
+      .map((item, index) => ({
+        item,
+        index,
+        acquiredAt: new Date(item?.acquiredTime || item?.acquiredDate || 0).getTime(),
+      }))
+      .sort((a, b) => {
+        const aTime = Number.isFinite(a.acquiredAt) ? a.acquiredAt : 0;
+        const bTime = Number.isFinite(b.acquiredAt) ? b.acquiredAt : 0;
+        return bTime - aTime || a.index - b.index;
+      })
+      .slice(0, count)
+      .map((entry) => entry.item);
+  }
+
   return {
     STORAGE_KEY,
     PROGRESS_KEY,
@@ -598,6 +617,7 @@
     summarizeNormalizedBooks,
     mergeScan,
     toCsv,
+    selectRecentBooks,
     computeOwnedRanges,
     computeMissingVolumes,
     splitSeriesAndVolume,

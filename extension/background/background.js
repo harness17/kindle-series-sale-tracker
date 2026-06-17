@@ -14,6 +14,9 @@
   const BG_PROBE_RUN_STATE_KEY = 'kstBgProbeRunState';
   const BG_PROBE_ENABLED_AT_KEY = 'kstBgProbeEnabledAt';
   const BG_BADGE_COUNT_KEY = 'kstBgBadgeCount';
+  const BG_BADGE_KEYS_KEY = 'kstBgBadgeKeys';
+  const BG_PROBE_HISTORY_KEY = 'kstBgProbeHistory';
+  const MAX_PROBE_HISTORY = 20;
   const ALARM_NAME = 'kstBgProbe';
   const CHUNK_SIZE = 8;
   const DEFAULT_INTERVAL_H = 24;
@@ -41,16 +44,40 @@
     await storageSet({ [CATALOG_PRICE_VERSION_KEY]: CATALOG_PRICE_VERSION });
   }
 
-  function markBgProbeCompleted(runState) {
+  async function appendProbeHistory(entry) {
+    const data = await storageGet(BG_PROBE_HISTORY_KEY);
+    const history = Array.isArray(data[BG_PROBE_HISTORY_KEY]) ? data[BG_PROBE_HISTORY_KEY] : [];
+    history.unshift(entry);
+    if (history.length > MAX_PROBE_HISTORY) history.length = MAX_PROBE_HISTORY;
+    await storageSet({ [BG_PROBE_HISTORY_KEY]: history });
+  }
+
+  async function detectInterruptedProbe() {
+    const data = await storageGet(BG_PROBE_RUN_STATE_KEY);
+    const runState = data[BG_PROBE_RUN_STATE_KEY];
+    if (!runState || runState.status !== 'running') return;
+    const entry = {
+      ...runState,
+      status: 'interrupted',
+      finishedAt: Date.now(),
+    };
+    await storageSet({ [BG_PROBE_RUN_STATE_KEY]: entry });
+    await appendProbeHistory(entry);
+    console.warn('[KST] previous background probe was interrupted', entry);
+  }
+
+  async function markBgProbeCompleted(runState) {
     const finishedAt = Date.now();
-    return storageSet({
+    const entry = {
+      ...runState,
+      status: 'completed',
+      finishedAt,
+    };
+    await storageSet({
       [BG_PROBE_LAST_RUN_KEY]: finishedAt,
-      [BG_PROBE_RUN_STATE_KEY]: {
-        ...runState,
-        status: 'completed',
-        finishedAt,
-      },
+      [BG_PROBE_RUN_STATE_KEY]: entry,
     });
+    await appendProbeHistory(entry);
   }
 
   function normalizeIntervalH(value) {
@@ -121,6 +148,7 @@
   }
 
   async function handleWake() {
+    await detectInterruptedProbe();
     await ensureCatalogPriceVersion();
     await reconcileAlarms();
     await ensureBgProbeEnabledAt();
@@ -197,15 +225,19 @@
 
   function badgeForResult(card, series, cacheEntry, prevEntry, currentCount) {
     let badgeCount = currentCount;
+    let nextNew = false;
+    let saleNew = false;
     const reconciled = card.reconcileCatalog(cacheEntry, series.highestVolume);
     const prevReconciled = card.reconcileCatalog(prevEntry, series.highestVolume);
     if (card.isConfirmedHasNext(reconciled) && !card.isConfirmedHasNext(prevReconciled)) {
       badgeCount += 1;
+      nextNew = true;
     }
     if (card.discountValue(reconciled) > 0 && card.discountValue(prevReconciled) <= 0) {
       badgeCount += 1;
+      saleNew = true;
     }
-    return badgeCount;
+    return { badgeCount, nextNew, saleNew };
   }
 
   function delay(ms) {
@@ -216,6 +248,7 @@
     const catalog = globalThis.__KST_CATALOG__;
     const card = globalThis.__KST_CARD__;
     const newCache = {};
+    const badgeKeys = {};
     let badgeCount = Number(currentBadgeCount) || 0;
     let failedCount = 0;
     let isFirst = true;
@@ -227,7 +260,14 @@
         const result = await card.probeSeries(catalog, series);
         const cacheEntry = { ...result, checkedAt: Date.now() };
         newCache[series.key] = cacheEntry;
-        badgeCount = badgeForResult(card, series, cacheEntry, prevCache[series.key], badgeCount);
+        const br = badgeForResult(card, series, cacheEntry, prevCache[series.key], badgeCount);
+        badgeCount = br.badgeCount;
+        if (br.nextNew || br.saleNew) {
+          badgeKeys[series.key] = {
+            ...(br.nextNew ? { next: true } : {}),
+            ...(br.saleNew ? { sale: true } : {}),
+          };
+        }
       } catch (error) {
         failedCount += 1;
         console.warn('[KST] background probe skipped', series?.key || series?.title, error);
@@ -243,6 +283,7 @@
     return {
       done: true,
       badgeCount,
+      badgeKeys,
       cacheEntries: newCache,
       failedCount,
       queue: updatedQueue,
@@ -258,6 +299,7 @@
       CACHE_KEY,
       BG_PROBE_QUEUE_KEY,
       BG_BADGE_COUNT_KEY,
+      BG_BADGE_KEYS_KEY,
     ]);
     if (!data[BG_PROBE_ENABLED_KEY]) return;
 
@@ -281,6 +323,7 @@
     let queue = currentQueue(data[BG_PROBE_QUEUE_KEY] || {}, eligible.length);
     let prevCache = data[CACHE_KEY] || {};
     let badgeCount = Number(data[BG_BADGE_COUNT_KEY]) || 0;
+    let badgeKeys = data[BG_BADGE_KEYS_KEY] || {};
     const startedAt = Date.now();
     let processed = queue.cursor;
     let succeeded = queue.cursor;
@@ -324,6 +367,9 @@
 
         prevCache = { ...prevCache, ...(response.cacheEntries || {}) };
         badgeCount = Number(response.badgeCount) || 0;
+        for (const [k, v] of Object.entries(response.badgeKeys || {})) {
+          badgeKeys[k] = { ...(badgeKeys[k] || {}), ...v };
+        }
         const chunkSucceeded = Object.keys(response.cacheEntries || {}).length;
         const chunkFailed = Number(response.failedCount) || 0;
         processed += chunk.length;
@@ -340,20 +386,29 @@
           succeeded: Math.min(succeeded, eligible.length),
           failed,
         };
-        await storageSet({ [BG_PROBE_RUN_STATE_KEY]: runState });
+        await storageSet({ [BG_PROBE_RUN_STATE_KEY]: runState, [BG_BADGE_KEYS_KEY]: badgeKeys });
+
+        if (mode === 'offscreen') {
+          await storageSet({
+            [CACHE_KEY]: prevCache,
+            [BG_PROBE_QUEUE_KEY]: queue,
+            [BG_BADGE_COUNT_KEY]: badgeCount,
+          });
+        }
 
         if (queue.cursor !== 0 && processedThisRun < eligible.length) {
           await delay(REQUEST_DELAY_MS);
         }
       } while (queue.cursor !== 0 && processedThisRun < eligible.length);
     } catch (error) {
-      await storageSet({
-        [BG_PROBE_RUN_STATE_KEY]: {
-          ...runState,
-          status: 'failed',
-          finishedAt: Date.now(),
-        },
-      });
+      const failedEntry = {
+        ...runState,
+        status: 'failed',
+        finishedAt: Date.now(),
+        error: String(error?.message || error).slice(0, 200),
+      };
+      await storageSet({ [BG_PROBE_RUN_STATE_KEY]: failedEntry });
+      await appendProbeHistory(failedEntry);
       throw error;
     } finally {
       if (mode === 'offscreen') await closeOffscreenDocument();
@@ -414,6 +469,13 @@
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === 'kst:reconcileAlarms') {
       reconcileAlarms()
+        .then(() => sendResponse({ ok: true }))
+        .catch((error) => sendResponse({ ok: false, error: String(error?.message || error) }));
+      return true;
+    }
+
+    if (message?.type === 'kst:runBgProbeNow') {
+      runBackgroundProbe()
         .then(() => sendResponse({ ok: true }))
         .catch((error) => sendResponse({ ok: false, error: String(error?.message || error) }));
       return true;

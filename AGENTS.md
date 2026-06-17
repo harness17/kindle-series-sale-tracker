@@ -1,45 +1,36 @@
 # AGENTS.md (kindle-series-sale-tracker)
 
-Amazon.co.jp の Kindle 蔵書一覧からシリーズ候補を抽出し、続刊確認用リストを作る Chrome / Firefox 拡張プロトタイプ。Manifest V3 / 素の JavaScript。
+Amazon.co.jp の Kindle 蔵書からシリーズ候補を抽出し、続刊・セール確認を支援する Chrome / Firefox 拡張。Manifest V3 / 素の JavaScript。
 
-## 検証コマンド
+## 作業開始
 
-```powershell
-node .\verify-kindle-library.mjs
-node .\verify-catalog-probe.mjs
-node .\verify-series-card.mjs
-node .\verify-background-probe.mjs
-node .\verify-auto-scan.mjs
-.\scripts\build-dev.ps1 -Target all
-.\scripts\package-release.ps1 -Target all
-```
+1. `git status --short --branch` で既存変更を確認する。
+2. `CLAUDE_CODE_HANDOFF.md` がある場合は、現在の作業に関係する最新セクションを読む。
+3. 新機能、複数ファイル修正、広い不具合修正では、正常系・前提条件・異常系・無回帰を含む完成条件を先に宣言する。
+4. コード変更前に次の共通ルールを読む。
 
-`verify-kindle-library.mjs` は所有データ抽出・シリーズ推定・CSV出力・所有レンジ/欠番計算を検証する。
-`verify-catalog-probe.mjs` は続刊検出（最高巻より先の巻の検出）マッチングを検証する。検索結果DOM抽出 `parseSearchResultsFromDoc` は実HTML fixture での検証が別途必要。
-`verify-series-card.mjs` は続刊カード表示用の状態解決を検証する。
-`verify-background-probe.mjs` は全件バックグラウンド巡回、失敗継続、重複実行防止を検証する。
-`verify-auto-scan.mjs` は自動スキャンの発火、スキップ、実行、完了、失敗状態を検証する。
-`extension/` または `manifests/` を変更したら、最終応答前に `.\scripts\build-dev.ps1 -Target all` を実行し、`dist/dev/chrome` と `dist/dev/firefox` に反映する。`dist/` はGit管理外なので、ソース変更のたびに再生成する。
+## 共通ルール
 
-## 取得方式
+- 常に読む: [.agents/rules/architecture-and-data.md](.agents/rules/architecture-and-data.md)
+- 常に読む: [.agents/rules/verification.md](.agents/rules/verification.md)
+- Amazon 取得、検索結果解析、fixture、権限を扱う場合: [.agents/rules/amazon-boundary.md](.agents/rules/amazon-boundary.md)
+- manifest、store-assets、版上げ、パッケージ、公開を扱う場合: [.agents/rules/release-and-store.md](.agents/rules/release-and-store.md)
 
-- 対象ページ: `https://www.amazon.co.jp/hz/mycd/digital-console/contentlist/booksAll*`
-- content script が同一オリジンで `GetContentOwnershipData` を呼び、`title` / `authors` / `asin` / `readStatus` / `acquiredTime` / `productImage` を取得する
-- 保存する明細 `items` は `asin` / `seriesKey` / `volume` / `imprint` / `author` に圧縮する。表紙はシリーズ要約の `latestOwnedThumbnailUrl` に最新所有巻1枚だけ保存する
-- 発行日・発売日は `GetContentOwnershipData` では確認できていないため、通常スキャン時点では保存しない。続刊照会時に検索結果から取れた場合だけ `kstCatalogCache` に保存する
-- 保存先は `chrome.storage.local`
-- cookie、ログイン情報、実購入URLは保存しない
+Claude Code 固有の共同作業ルールは `CLAUDE.md` と `.claude/rules/` を参照する。プロジェクトの実装契約は `.agents/rules/` を正本とし、Claude/Codex 固有ファイルへ重複コピーしない。
 
-## 実装方針
+## 必須境界
 
-- `extension/shared/kindle-library.js` を所有データ正規化・シリーズ推定・CSV出力の Single Source of Truth にする
-- content script は Amazon からの取得と storage 保存に集中させる
-- popup は保存済み結果の表示とエクスポートに集中させる
-- セール検出や未購入ASIN確定を追加する場合は、まず fixture を追加して verify を拡張する
+- `extension/shared/kindle-library.js` を所有データ正規化・シリーズ推定・CSV生成の正本にする。
+- `extension/shared/catalog-probe.js` は検索結果の抽出・候補照合、`extension/shared/series-card.js` は照会フローと表示用状態解決を担当する。
+- content script は Amazon 同一オリジン取得と保存、popup/options は保存済み結果の表示・設定・明示操作に集中させる。
+- Chrome の background DOM 解析は offscreen document、Firefox は background scripts の DOMParser を使う。片側だけの修正にしない。
+- cookie、認証情報、実購入URL、個人の蔵書明細をソース、fixture、ログ、handoff、store-assets、パッケージへ入れない。
+- permissions / host_permissions の拡大、ストア提出物の作成・公開はユーザー確認を挟む。
+- `git add -A` / `git add .` は使わず、stage は明示したファイルだけにする。
 
-## 既知の制約
+## 完了ゲート
 
-- Amazon 内部 Ajax 依存のため、ページ変更で壊れる可能性がある
-- シリーズ名と巻数はタイトル文字列からの簡易推定
-- 価格・セール情報は続刊照会時にAmazon検索結果から取れた範囲だけ表示する
-- host permissions や store package 作成はユーザー確認を挟む
+- 変更範囲に対応する verify を実行し、失敗を未解決のまま成功扱いしない。
+- `extension/` または `manifests/` を変更したら `.\scripts\build-dev.ps1 -Target all` を実行し、`dist/dev/chrome` と `dist/dev/firefox` を更新する。
+- Amazon の実ページ確認が必要で自動化できない場合は、未確認範囲とユーザーが行う最小手順を明記する。
+- 公開物・提出物は個人情報、ローカルパス、未公開情報、不要ファイルを確認してから共有する。

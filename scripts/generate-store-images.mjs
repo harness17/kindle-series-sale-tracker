@@ -312,28 +312,39 @@ body {
   <div class="stage">
     <main class="app panel">
       <header class="header">
-        <h1>Kindle Series</h1>
-        <p>Sample data</p>
+        <div class="header-title">
+          <h1>Kindle Series</h1>
+          <p id="summary">Sample data</p>
+        </div>
         <select class="lang-toggle" aria-label="Language"><option>English</option></select>
       </header>
-      <section class="toolbar toolbar-scan" aria-label="Scan">
-        <button type="button">Full Scan</button>
-        <button type="button">Quick Update</button>
-      </section>
-      <section class="toolbar toolbar-nav" aria-label="Navigation">
-        <button type="button">Kindle Library</button>
-        <button type="button">Full Page</button>
-        <button type="button">CSV</button>
-        <button type="button">JSON</button>
-      </section>
-      <section class="toolbar toolbar-sort"><select><option>Discount first</option></select></section>
-      <section class="toolbar toolbar-bulk">
-        <button type="button">Recheck visible</button>
-        <button type="button">New vol. check</button>
+      <section class="control-panel" aria-label="Library">
+        <h2 class="panel-heading">Library</h2>
+        <div class="toolbar toolbar-scan">
+          <button class="primary-action" type="button">Full Scan</button>
+          <button type="button">Quick Update</button>
+        </div>
+        <div class="toolbar toolbar-nav">
+          <button class="quiet-action" type="button">Kindle Library</button>
+          <button class="quiet-action" type="button">Full Page</button>
+        </div>
+        <details class="compact-details export-details">
+          <summary>Export data</summary>
+        </details>
       </section>
       <p class="status">Last scan: sample data</p>
-      <section>
-        <h2>Series Candidates</h2>
+      <details class="compact-details automation-status">
+        <summary>Execution status</summary>
+      </details>
+      <section class="series-section">
+        <div class="section-heading">
+          <h2>Series Candidates</h2>
+          <select><option>Discount first</option></select>
+        </div>
+        <div class="toolbar toolbar-bulk">
+          <button class="primary-action" type="button">New vol. check</button>
+          <button type="button">Recheck visible</button>
+        </div>
         <div class="series-list">${panelItems()}</div>
       </section>
     </main>

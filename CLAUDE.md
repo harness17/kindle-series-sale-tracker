@@ -1,43 +1,28 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Claude Code がこのリポジトリで作業するときの入口。
 
-## このリポジトリの位置づけ
+## 先に読む
 
-`kindle-series-sale-tracker` は **Manifest V3 の Chrome / Firefox 拡張**（独立 git リポジトリ）。Amazon.co.jp の Kindle 蔵書一覧からシリーズ候補を抽出し、続刊確認用リストを作る。素の JavaScript で実装する。
+実装・データ・検証・リリース契約は [AGENTS.md](AGENTS.md) と `.agents/rules/` を正本とする。作業内容に対応する共通ルールを先に読む。
 
-実装方針・取得方式・検証コマンドの詳細は [AGENTS.md](AGENTS.md) を参照する。
-
-## DOM スクレイピング系拡張の検証戦略
-
-Amazon Kindle 蔵書ページの DOM/内部 Ajax に依存するため、対象サイトの変更で壊れやすい。次を用意する:
-
-- `fixtures/<case>.html` — 実 DOM のスニペット（ユーザーから貰った HTML をそのまま保存）
-- `verify-kindle-library.mjs` / `verify-catalog-probe.mjs` — jsdom で検出・推定関数を単体検証するスクリプト
-- 新パターンに遭遇したら fixtures に追加し、過去ケースの回帰も同時に検証する
-
-### Amazon 等の要ログインサイトの DOM 確認
-
-agent-browser は未認証なので、ログイン必須ページの DOM は取得できない。サンプルが必要なときはユーザーに DevTools (F12) → Console で実行してもらい、出力を `fixtures/<case>.html` に保存して `verify-*.mjs` のテストケースに追加する。
-
-## Git
-
-このリポジトリは remote 未設定のローカルリポジトリ。store package、スクリーンショット、ローカル設定、**個人の Kindle 蔵書データ（購入履歴）** を stage する前に必ず確認する。`git add -A` / `git add .` は使わず、変更ファイルを個別指定する。
-
-## 共同開発ハーネス（Codex × Claude Code）
-
-このリポジトリは Codex と Claude Code が共同で開発する。汎用ハーネス本体と kindle 固有 profile は以下を読む。
+Claude/Codex共同作業が関係する場合は次も読む。
 
 @.claude/rules/cross-agent-harness.md
 @.claude/rules/project-collaboration-profile.md
 @.claude/rules/handoff-protocol.md
 @.claude/rules/store-reviewer-notes.md
 
-**Claude Code が作業を開始するときの流れ：**
+## 作業開始
 
-1. ユーザーの依頼を聞いたら、汎用ハーネスと kindle profile の担当境界で Codex に振るか自分で握るか判断する。
-2. 自分で実装する場合は通常のフローで進め、必要に応じて Codex にレビューを依頼する。
-3. Codex に振る・Codex の作業をレビューする場合は `.mcp.json` の codex MCP サーバ経由で連携する。
-4. Merge / publish 判断はユーザー指示を待つ。
+1. `git status --short --branch` で、ユーザーまたは他エージェントの未コミット変更を確認する。
+2. ローカルに `CLAUDE_CODE_HANDOFF.md` がある場合は、現在の主題に関係する最新セクションだけを読む。
+3. 実装を担当するか、Codexへレビュー・検証を依頼するかを、変更範囲と競合可能性から決める。
+4. 複数ファイル変更では完成条件と触る範囲を先に示す。
 
-**最新の引き継ぎ：** ローカルに `CLAUDE_CODE_HANDOFF.md` がある場合だけ参照する。このファイルは公開リポジトリには含めない。
+## 共同作業
+
+- 同じファイル・領域に既存変更がある場合は、内容を読まずに上書きしない。
+- Codexへ渡す場合は、実装・レビュー・検証の担当、触ってよい範囲、完成条件をhandoffへ明記する。
+- merge、version bump、package、store提出、publishはユーザー指示を待つ。
+- 最新のローカル引き継ぎは `CLAUDE_CODE_HANDOFF.md` が存在する場合だけ参照し、公開リポジトリへ含めない。

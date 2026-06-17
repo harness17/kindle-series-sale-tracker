@@ -214,7 +214,9 @@
 
   function autoScanStatusParts(data, scan) {
     if (data[AUTO_SCAN_ENABLED_KEY] !== true) return [t('statusDisabled')];
-    const lastRun = (Number(data[AUTO_SCAN_LAST_ATTEMPT_KEY]) || 0) || (Number(scan?.scannedAt) || 0);
+    const lastAttempt = Number(data[AUTO_SCAN_LAST_ATTEMPT_KEY]) || 0;
+    const scannedAt = Number(scan?.scannedAt) || 0;
+    const lastRun = Math.max(lastAttempt, scannedAt);
     const base = lastRun || (Number(data[AUTO_SCAN_ENABLED_AT_KEY]) || 0);
     const intervalMs = normalizeIntervalD(data[AUTO_SCAN_INTERVAL_KEY]) * 86400000;
     return [t('statusEnabled'), ...lastNextParts(lastRun, base, intervalMs)];
@@ -281,13 +283,29 @@
     const processed = Math.min(Number(value.processed) || 0, total);
     const failed = Number(value.failed) || 0;
     if (value.status === 'running') return t('statusRunRunning', processed, total, failed);
+    if (value.status === 'interrupted') {
+      return t('statusRunInterrupted', formatStatusDate(value.finishedAt), processed, total);
+    }
     if (value.status === 'failed') {
-      return t('statusRunFailed', formatStatusDate(value.finishedAt), processed, total);
+      return t('statusRunFailed', formatStatusDate(value.finishedAt), processed, total, value.error || '');
     }
     if (value.status === 'completed') {
       return t('statusRunCompleted', formatStatusDate(value.finishedAt), total, failed);
     }
     return '';
+  }
+
+  function bgHistorySummary(history) {
+    if (!Array.isArray(history) || history.length === 0) return '';
+    const counts = { completed: 0, failed: 0, interrupted: 0 };
+    for (const entry of history) {
+      if (counts[entry.status] !== undefined) counts[entry.status] += 1;
+    }
+    const parts = [];
+    if (counts.completed) parts.push(t('historyCompleted', counts.completed));
+    if (counts.failed) parts.push(t('historyFailed', counts.failed));
+    if (counts.interrupted) parts.push(t('historyInterrupted', counts.interrupted));
+    return parts.length ? t('historyLabel', history.length, parts.join(' / ')) : '';
   }
 
   function snapshotBreakdown(eligible, catalogCache) {
@@ -298,6 +316,8 @@
       return acc;
     }, { next: 0, discount: 0 });
   }
+
+  const BG_PROBE_HISTORY_KEY = 'kstBgProbeHistory';
 
   async function refreshAutomationStatus() {
     const data = await chrome.storage.local.get([
@@ -316,6 +336,7 @@
       BG_PROBE_LAST_RUN_KEY,
       BG_PROBE_RUN_STATE_KEY,
       BG_PROBE_ENABLED_AT_KEY,
+      BG_PROBE_HISTORY_KEY,
     ]);
     const scan = data[api.STORAGE_KEY] || null;
     const completedMap = data[COMPLETED_KEY] || {};
@@ -339,6 +360,8 @@
       } else {
         bgParts.push(t('statusProgress', bgProgress(data[BG_PROBE_QUEUE_KEY] || {}, eligible.length), eligible.length));
       }
+      const historyText = bgHistorySummary(data[BG_PROBE_HISTORY_KEY]);
+      if (historyText) bgParts.push(historyText);
       bgParts.push(t('statusBreakdown', breakdown.next, breakdown.discount));
     }
     els.bgProbeStatus.textContent = bgParts.join(' / ');
@@ -812,6 +835,7 @@
         BG_PROBE_LAST_RUN_KEY,
         BG_PROBE_RUN_STATE_KEY,
         BG_PROBE_ENABLED_AT_KEY,
+        BG_PROBE_HISTORY_KEY,
       ];
       if (watched.some((key) => changes[key])) refreshAutomationStatus();
     });

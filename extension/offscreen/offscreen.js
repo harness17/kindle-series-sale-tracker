@@ -1,10 +1,6 @@
 (function () {
   'use strict';
 
-  const CACHE_KEY = 'kstCatalogCache';
-  const BG_PROBE_QUEUE_KEY = 'kstBgProbeQueue';
-  const BG_BADGE_COUNT_KEY = 'kstBgBadgeCount';
-
   function nextQueue(queue, chunkLength) {
     const cursor = Number.isFinite(queue?.cursor) ? queue.cursor : 0;
     const eligibleLength = Number.isFinite(queue?.eligibleLength) ? queue.eligibleLength : null;
@@ -31,6 +27,7 @@
     const chunk = Array.isArray(message.chunk) ? message.chunk : [];
     const prevCache = message.prevCache || {};
     const newCache = {};
+    const badgeKeys = {};
     let badgeCount = Number(message.currentBadgeCount) || 0;
     let failedCount = 0;
     let isFirst = true;
@@ -49,9 +46,11 @@
         const prevReconciled = card.reconcileCatalog(prevCache[series.key], series.highestVolume);
         if (card.isConfirmedHasNext(reconciled) && !card.isConfirmedHasNext(prevReconciled)) {
           badgeCount += 1;
+          badgeKeys[series.key] = { ...(badgeKeys[series.key] || {}), next: true };
         }
         if (card.discountValue(reconciled) > 0 && card.discountValue(prevReconciled) <= 0) {
           badgeCount += 1;
+          badgeKeys[series.key] = { ...(badgeKeys[series.key] || {}), sale: true };
         }
       } catch (error) {
         failedCount += 1;
@@ -60,15 +59,10 @@
     }
 
     const updatedQueue = nextQueue(message.queue || {}, chunk.length);
-    await chrome.storage.local.set({
-      [CACHE_KEY]: { ...prevCache, ...newCache },
-      [BG_PROBE_QUEUE_KEY]: updatedQueue,
-      [BG_BADGE_COUNT_KEY]: badgeCount,
-    });
-
     return {
       done: true,
       badgeCount,
+      badgeKeys,
       cacheEntries: newCache,
       failedCount,
       queue: updatedQueue,

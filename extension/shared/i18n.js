@@ -22,6 +22,8 @@
       checkingSeriesStatus: function (title) { return title + ' の続刊と価格を確認しています…'; },
       noNewCheck: '新刊チェック対象なし',
       priorityBadge: '優先',
+      newNextBadge: 'NEW 続刊',
+      newSaleBadge: 'NEW セール',
       recheckLabel: '再確認',
       newCheckLabel: '新刊チェック',
       bulkProgress: function (label, done, total) { return label + '中… ' + done + '/' + total; },
@@ -49,7 +51,7 @@
       startingFullScan: '全件取得を開始します…',
       simpleScanDone: '簡易更新が完了しました。',
       fullScanDone: '全件取得が完了しました。',
-      exportFetching: 'エクスポート用に全件を再取得しています…',
+      exportFetching: 'エクスポート用の書籍を取得しています…',
       exportFailed: '再取得に失敗しました。',
       exportDone: function (n) { return 'エクスポート完了（' + n + '冊）。'; },
       simpleScanTitle: '前回以降の新着だけを高速に取り込みます',
@@ -59,8 +61,14 @@
       seriesCandidates: 'シリーズ候補',
       scanFull: '全件取得',
       scanSimple: '簡易更新',
+      libraryActions: '蔵書操作',
       openLibrary: 'Kindle一覧',
       openFullPage: '専用ページ',
+      exportHeading: 'データ出力',
+      exportRangeLabel: '出力範囲',
+      exportAll: '全件',
+      exportLatest100: '直近100件',
+      exportLatest500: '直近500件',
       sortPriority: '優先度順',
       sortDiscount: '割引率順',
       checkVisible: '一括再確認',
@@ -160,10 +168,17 @@
       statusRunCompleted: function (date, total, failed) {
         return '完了 ' + date + ' / ' + total + '件' + (failed ? '（失敗 ' + failed + '）' : '');
       },
-      statusRunFailed: function (date, done, total) {
-        return '中断 ' + date + ' / ' + done + '/' + total;
+      statusRunFailed: function (date, done, total, error) {
+        return '失敗 ' + date + ' / ' + done + '/' + total + (error ? ' / ' + error : '');
+      },
+      statusRunInterrupted: function (date, done, total) {
+        return 'SW中断 ' + date + ' / ' + done + '/' + total;
       },
       statusBreakdown: function (next, discount) { return '続刊あり ' + next + ' / セール ' + discount; },
+      historyLabel: function (total, detail) { return '直近' + total + '回: ' + detail; },
+      historyCompleted: function (n) { return '成功' + n; },
+      historyFailed: function (n) { return '失敗' + n; },
+      historyInterrupted: function (n) { return '中断' + n; },
       days3: '3日',
       days7: '7日',
       days14: '14日',
@@ -214,6 +229,8 @@
       checkingSeriesStatus: function (title) { return 'Checking next volumes for ' + title + '…'; },
       noNewCheck: 'No series to check',
       priorityBadge: 'Priority',
+      newNextBadge: 'NEW Sequel',
+      newSaleBadge: 'NEW Sale',
       recheckLabel: 'Recheck',
       newCheckLabel: 'Checking',
       bulkProgress: function (label, done, total) { return label + '… ' + done + '/' + total; },
@@ -241,7 +258,7 @@
       startingFullScan: 'Starting full scan…',
       simpleScanDone: 'Quick update complete.',
       fullScanDone: 'Full scan complete.',
-      exportFetching: 'Fetching all books for export…',
+      exportFetching: 'Fetching books for export…',
       exportFailed: 'Failed to fetch books.',
       exportDone: function (n) { return 'Export complete (' + n + ' books).'; },
       simpleScanTitle: 'Quickly fetch only new purchases since the last scan',
@@ -251,8 +268,14 @@
       seriesCandidates: 'Series Candidates',
       scanFull: 'Full Scan',
       scanSimple: 'Quick Update',
+      libraryActions: 'Library',
       openLibrary: 'Kindle Library',
       openFullPage: 'Full Page',
+      exportHeading: 'Export data',
+      exportRangeLabel: 'Export range',
+      exportAll: 'All books',
+      exportLatest100: 'Latest 100',
+      exportLatest500: 'Latest 500',
       sortPriority: 'Priority first',
       sortDiscount: 'Discount first',
       checkVisible: 'Recheck visible',
@@ -352,10 +375,17 @@
       statusRunCompleted: function (date, total, failed) {
         return 'Completed ' + date + ' / ' + total + (failed ? ' (' + failed + ' failed)' : '');
       },
-      statusRunFailed: function (date, done, total) {
-        return 'Stopped ' + date + ' / ' + done + '/' + total;
+      statusRunFailed: function (date, done, total, error) {
+        return 'Failed ' + date + ' / ' + done + '/' + total + (error ? ' / ' + error : '');
+      },
+      statusRunInterrupted: function (date, done, total) {
+        return 'SW interrupted ' + date + ' / ' + done + '/' + total;
       },
       statusBreakdown: function (next, discount) { return 'Next vol ' + next + ' / Sale ' + discount; },
+      historyLabel: function (total, detail) { return 'Last ' + total + ' runs: ' + detail; },
+      historyCompleted: function (n) { return n + ' ok'; },
+      historyFailed: function (n) { return n + ' failed'; },
+      historyInterrupted: function (n) { return n + ' interrupted'; },
       days3: '3 days',
       days7: '7 days',
       days14: '14 days',
@@ -422,6 +452,11 @@
       var key = el.getAttribute('data-i18n-title');
       var value = translate(lang, key);
       if (value) el.title = value;
+    });
+    root.querySelectorAll('[data-i18n-aria-label]').forEach(function (el) {
+      var key = el.getAttribute('data-i18n-aria-label');
+      var value = translate(lang, key);
+      if (value) el.setAttribute('aria-label', value);
     });
     root.querySelectorAll('[data-i18n-placeholder]').forEach(function (el) {
       var key = el.getAttribute('data-i18n-placeholder');

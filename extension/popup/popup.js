@@ -12,6 +12,7 @@
   const PRIORITY_KEY = 'kstPrioritySeries';
   const EXCLUDED_KEY = 'kstExcludedSeries';
   const BG_BADGE_COUNT_KEY = 'kstBgBadgeCount';
+  const BG_BADGE_KEYS_KEY = 'kstBgBadgeKeys';
   const AUTO_SCAN_ENABLED_KEY = 'kstAutoScanEnabled';
   const AUTO_SCAN_INTERVAL_KEY = 'kstAutoScanIntervalD';
   const AUTO_SCAN_LAST_ATTEMPT_KEY = 'kstAutoScanLastAttempt';
@@ -43,6 +44,7 @@
   const checkSimpleBtn = document.getElementById('checkSimple');
   const langToggle = document.getElementById('langToggle');
   let currentScan = null;
+  let currentBadgeKeys = {};
 
   async function ensureCatalogPriceVersion() {
     const data = await chrome.storage.local.get(CATALOG_PRICE_VERSION_KEY);
@@ -136,7 +138,9 @@
 
   function autoScanStatusText(data, scan) {
     if (data[AUTO_SCAN_ENABLED_KEY] !== true) return t('statusDisabled');
-    const lastRun = (Number(data[AUTO_SCAN_LAST_ATTEMPT_KEY]) || 0) || (Number(scan?.scannedAt) || 0);
+    const lastAttempt = Number(data[AUTO_SCAN_LAST_ATTEMPT_KEY]) || 0;
+    const scannedAt = Number(scan?.scannedAt) || 0;
+    const lastRun = Math.max(lastAttempt, scannedAt);
     const base = lastRun || (Number(data[AUTO_SCAN_ENABLED_AT_KEY]) || 0);
     const intervalMs = normalizeIntervalD(data[AUTO_SCAN_INTERVAL_KEY]) * 86400000;
     return lastNextText(lastRun, base, intervalMs);
@@ -189,13 +193,29 @@
     const processed = Math.min(Number(value.processed) || 0, total);
     const failed = Number(value.failed) || 0;
     if (value.status === 'running') return t('statusRunRunning', processed, total, failed);
+    if (value.status === 'interrupted') {
+      return t('statusRunInterrupted', formatStatusDate(value.finishedAt), processed, total);
+    }
     if (value.status === 'failed') {
-      return t('statusRunFailed', formatStatusDate(value.finishedAt), processed, total);
+      return t('statusRunFailed', formatStatusDate(value.finishedAt), processed, total, value.error || '');
     }
     if (value.status === 'completed') {
       return t('statusRunCompleted', formatStatusDate(value.finishedAt), total, failed);
     }
     return '';
+  }
+
+  function bgHistorySummary(history) {
+    if (!Array.isArray(history) || history.length === 0) return '';
+    const counts = { completed: 0, failed: 0, interrupted: 0 };
+    for (const entry of history) {
+      if (counts[entry.status] !== undefined) counts[entry.status] += 1;
+    }
+    const parts = [];
+    if (counts.completed) parts.push(t('historyCompleted', counts.completed));
+    if (counts.failed) parts.push(t('historyFailed', counts.failed));
+    if (counts.interrupted) parts.push(t('historyInterrupted', counts.interrupted));
+    return parts.length ? t('historyLabel', history.length, parts.join(' / ')) : '';
   }
 
   function snapshotBreakdown(scan) {
@@ -205,6 +225,8 @@
       return acc;
     }, { next: 0, discount: 0 });
   }
+
+  const BG_PROBE_HISTORY_KEY = 'kstBgProbeHistory';
 
   async function setPopupStatus(scan) {
     const data = await chrome.storage.local.get([
@@ -218,6 +240,7 @@
       BG_PROBE_LAST_RUN_KEY,
       BG_PROBE_RUN_STATE_KEY,
       BG_PROBE_ENABLED_AT_KEY,
+      BG_PROBE_HISTORY_KEY,
     ]);
     await ensureAutoScanEnabledAt(data);
     await ensureBgProbeEnabledAt(data);
@@ -227,8 +250,9 @@
       : t('statusDisabled');
     const breakdown = snapshotBreakdown(scan);
     const runStateText = bgRunStateText(data[BG_PROBE_RUN_STATE_KEY]);
+    const historyText = bgHistorySummary(data[BG_PROBE_HISTORY_KEY]);
     popupBgProbeStatus.textContent = data[BG_PROBE_ENABLED_KEY] === true
-      ? [bgProbeStatusText(data), runStateText, t('statusBreakdown', breakdown.next, breakdown.discount)]
+      ? [bgProbeStatusText(data), runStateText, historyText, t('statusBreakdown', breakdown.next, breakdown.discount)]
           .filter(Boolean)
           .join(' / ')
       : t('statusDisabled');
@@ -276,6 +300,9 @@
   function sortedSeries(list) {
     const by = popupSort.value;
     return list.slice().sort((a, b) => {
+      const aN = currentBadgeKeys[a.key] ? 1 : 0;
+      const bN = currentBadgeKeys[b.key] ? 1 : 0;
+      if (bN !== aN) return bN - aN;
       if (by === 'discount') {
         const d = card.discountValue(b.catalog) - card.discountValue(a.catalog);
         if (d !== 0) return d;
@@ -329,6 +356,8 @@
         <div class="series-title">
           <strong></strong>
           <div class="title-badges">
+            <span class="badge new-next" hidden></span>
+            <span class="badge new-sale" hidden></span>
             <span class="badge priority-badge" hidden></span>
             <span class="badge"></span>
           </div>
@@ -346,6 +375,18 @@
         </div>
       `;
       item.querySelector('strong').textContent = group.title;
+      const notification = currentBadgeKeys[group.key];
+      if (notification?.next) {
+        const nb = item.querySelector('.new-next');
+        nb.textContent = t('newNextBadge');
+        nb.hidden = false;
+      }
+      if (notification?.sale) {
+        const sb = item.querySelector('.new-sale');
+        sb.textContent = t('newSaleBadge');
+        sb.hidden = false;
+      }
+      if (notification) item.classList.add('notified');
       item.querySelector('.priority-badge').hidden = !group.priority;
       item.querySelector('.priority-badge').textContent = t('priorityBadge');
       item.querySelector('.title-badges .badge:last-child').textContent = t('bookCount', group.count);
@@ -512,21 +553,32 @@
   async function exportBooks(kind) {
     const tab = await getKindleTab();
     if (!tab) return;
+    const selectedLimit = Number(document.getElementById('exportRange').value);
+    const limit = selectedLimit === 100 || selectedLimit === 500 ? selectedLimit : null;
     setStatus(t('exportFetching'));
-    const response = await sendToTab(tab.id, { type: 'kst:exportFetch' });
+    const response = await sendToTab(tab.id, { type: 'kst:exportFetch', limit });
     if (!response.ok || !Array.isArray(response.books) || response.books.length === 0) {
       setStatus(response.error || t('exportFailed'));
       return;
     }
+    const rangeSuffix = limit ? `-latest-${limit}` : '';
     if (kind === 'csv') {
-      downloadText('kindle-series-books.csv', 'text/csv;charset=utf-8', `﻿${api.toCsv(response.books)}`);
+      downloadText(
+        `kindle-series-books${rangeSuffix}.csv`,
+        'text/csv;charset=utf-8',
+        `﻿${api.toCsv(response.books)}`
+      );
     } else {
       const payload = {
         scannedAt: Date.now(),
         items: response.books,
         series: api.buildSeriesSummary(response.books),
       };
-      downloadText('kindle-series-books.json', 'application/json;charset=utf-8', JSON.stringify(payload, null, 2));
+      downloadText(
+        `kindle-series-books${rangeSuffix}.json`,
+        'application/json;charset=utf-8',
+        JSON.stringify(payload, null, 2)
+      );
     }
     setStatus(t('exportDone', response.books.length));
   }
@@ -575,8 +627,10 @@
 
   async function init() {
     await ensureCatalogPriceVersion();
+    const badgeData = await chrome.storage.local.get(BG_BADGE_KEYS_KEY);
+    currentBadgeKeys = badgeData[BG_BADGE_KEYS_KEY] || {};
     if (chrome.action?.setBadgeText) chrome.action.setBadgeText({ text: '' });
-    chrome.storage.local.set({ [BG_BADGE_COUNT_KEY]: 0 });
+    chrome.storage.local.set({ [BG_BADGE_COUNT_KEY]: 0, [BG_BADGE_KEYS_KEY]: {} });
 
     const data = await chrome.storage.local.get([THEME_KEY, LANGUAGE_KEY]);
     lang = i18n.normalizeLanguage(data[LANGUAGE_KEY]);
@@ -601,6 +655,7 @@
         AUTO_SCAN_RUN_STATE_KEY,
         AUTO_SCAN_ENABLED_AT_KEY,
         BG_PROBE_ENABLED_KEY,
+        BG_PROBE_HISTORY_KEY,
         BG_PROBE_INTERVAL_KEY,
         BG_PROBE_LAST_RUN_KEY,
         BG_PROBE_RUN_STATE_KEY,

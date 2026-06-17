@@ -10,6 +10,7 @@ const {
   normalizeBook,
   toMinimalBook,
   toCsv,
+  selectRecentBooks,
   computeOwnedRanges,
   computeMissingVolumes,
   splitSeriesAndVolume,
@@ -21,6 +22,17 @@ const items = extractOwnershipItems(payload);
 const series = buildSeriesSummary(items);
 const csv = toCsv(items);
 const serializedItems = JSON.stringify({ items: items.map(toMinimalBook) });
+
+const recentSource = [
+  { asin: 'old', acquiredTime: '2024-01-01T00:00:00Z' },
+  { asin: 'invalid', acquiredTime: 'unknown' },
+  { asin: 'new-a', acquiredTime: '2026-01-01T00:00:00Z' },
+  { asin: 'new-b', acquiredTime: '2026-01-01T00:00:00Z' },
+  { asin: 'middle', acquiredDate: '2025-01-01T00:00:00Z' },
+];
+const recentThree = selectRecentBooks(recentSource, 3);
+const recentMoreThanAvailable = selectRecentBooks(recentSource, 100);
+const recentInvalidLimit = selectRecentBooks(recentSource, 0);
 
 // --- シリーズ推定（タイトル表記ゆれ）の回帰テスト ---
 function summarize(titles) {
@@ -179,6 +191,23 @@ const checks = [
   {
     name: 'CSV にASINとシリーズ名を出力する',
     ok: csv.includes('"B000000001"') && csv.includes('"サンプル冒険譚"'),
+  },
+  {
+    name: '直近指定は取得日時の降順で必要件数だけ返す',
+    ok:
+      JSON.stringify(recentThree.map((book) => book.asin)) ===
+      JSON.stringify(['new-a', 'new-b', 'middle']),
+  },
+  {
+    name: '直近指定件数に満たない場合は全件を日時降順で返す',
+    ok:
+      recentMoreThanAvailable.length === recentSource.length &&
+      recentMoreThanAvailable[0].asin === 'new-a' &&
+      recentMoreThanAvailable.at(-1).asin === 'invalid',
+  },
+  {
+    name: '直近指定が無効なら元の順序で全件を返す',
+    ok: JSON.stringify(recentInvalidLimit) === JSON.stringify(recentSource),
   },
   {
     name: '保存用明細に画像URLを含めない',

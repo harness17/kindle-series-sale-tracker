@@ -287,6 +287,29 @@
     return Array.from(byAsin.values());
   }
 
+  async function collectLatestBooks(csrfToken, limit) {
+    const pass = { sortOrder: 'DESCENDING', sortIndex: 'DATE' };
+    const byAsin = new Map();
+
+    for (let startIndex = 0; startIndex < MAX_START_INDEX; startIndex += BATCH_SIZE) {
+      const { batch } = await fetchOwnershipPage(csrfToken, pass, startIndex);
+      if (batch.length === 0) break;
+
+      for (const book of batch) {
+        if (!byAsin.has(book.asin)) byAsin.set(book.asin, book);
+      }
+
+      const progress = Math.min(byAsin.size, limit);
+      await saveProgress(progress, limit, 'running');
+      showProgress(t('exportFetching'), progress, limit);
+
+      if (byAsin.size >= limit || batch.length < BATCH_SIZE) break;
+      await delay(REQUEST_DELAY_MS);
+    }
+
+    return api.selectRecentBooks(Array.from(byAsin.values()), limit);
+  }
+
   // 簡易モード: 取得日 降順で先頭から取得し、既知 ASIN が連続して規定数出たら停止する。
   // 新刊（最近の購入）はリストの先頭付近に集まるため、新着分だけを短時間で拾える。
   // 限界: 配信が後から確定して「古い取得日」で現れる本（ゴースト配信）や、返品・削除は
@@ -409,16 +432,18 @@
     return { ...result, addedItems };
   }
 
-  // エクスポート用: 保存はせず、全件をフル書誌（title/authors 付き）で取得して返す。
+  // エクスポート用: 保存はせず、指定範囲をフル書誌（title/authors 付き）で取得して返す。
   // 保存データは最小書誌のため、CSV/JSON の明細出力にはその場での再取得が必要。
-  async function collectForExport() {
+  async function collectForExport(limit) {
     const i18n = typeof window !== 'undefined' && window.__KST_I18N__;
     if (i18n) {
       const langData = await chrome.storage.local.get(i18n.LANGUAGE_KEY);
       currentLang = i18n.normalizeLanguage(langData[i18n.LANGUAGE_KEY]);
     }
     const csrfToken = ensureContext();
-    const normalized = await collectAllBooks(csrfToken);
+    const normalized = limit
+      ? await collectLatestBooks(csrfToken, limit)
+      : await collectAllBooks(csrfToken);
     hideBannerSoon();
     return normalized;
   }
@@ -506,7 +531,9 @@
     }
 
     if (message?.type === 'kst:exportFetch') {
-      collectForExport()
+      const requestedLimit = Number(message.limit);
+      const limit = requestedLimit === 100 || requestedLimit === 500 ? requestedLimit : null;
+      collectForExport(limit)
         .then((books) => sendResponse({ ok: true, books }))
         .catch((error) => sendResponse({ ok: false, error: error.message }));
       return true;
