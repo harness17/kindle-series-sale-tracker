@@ -21,6 +21,7 @@
   const CHUNK_SIZE = 8;
   const DEFAULT_INTERVAL_H = 24;
   const REQUEST_DELAY_MS = 350;
+  const MAX_CONSECUTIVE_UNKNOWN = 3;
 
   const sidePanelApi = chrome['sidePanel'];
   if (sidePanelApi && typeof sidePanelApi.setPanelBehavior === 'function') {
@@ -244,33 +245,58 @@
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  async function probeInline(chunk, prevCache, currentBadgeCount, queue) {
+  async function probeInline(
+    chunk,
+    prevCache,
+    currentBadgeCount,
+    queue,
+    initialUnknownStreak
+  ) {
     const catalog = globalThis.__KST_CATALOG__;
     const card = globalThis.__KST_CARD__;
     const newCache = {};
     const badgeKeys = {};
     let badgeCount = Number(currentBadgeCount) || 0;
     let failedCount = 0;
+    let unknownStreak = Number(initialUnknownStreak) || 0;
     let isFirst = true;
 
     for (const series of chunk) {
       if (!isFirst) await delay(REQUEST_DELAY_MS);
       isFirst = false;
+      let result;
       try {
-        const result = await card.probeSeries(catalog, series);
-        const cacheEntry = { ...result, checkedAt: Date.now() };
-        newCache[series.key] = cacheEntry;
-        const br = badgeForResult(card, series, cacheEntry, prevCache[series.key], badgeCount);
-        badgeCount = br.badgeCount;
-        if (br.nextNew || br.saleNew) {
-          badgeKeys[series.key] = {
-            ...(br.nextNew ? { next: true } : {}),
-            ...(br.saleNew ? { sale: true } : {}),
-          };
-        }
+        result = await card.probeSeries(catalog, series);
       } catch (error) {
         failedCount += 1;
+        unknownStreak = 0;
         console.warn('[KST] background probe skipped', series?.key || series?.title, error);
+        continue;
+      }
+
+      if (result?.status === 'unknown') {
+        unknownStreak += 1;
+        if (unknownStreak >= MAX_CONSECUTIVE_UNKNOWN) {
+          throw new Error(
+            `Catalog results were indeterminate for ${MAX_CONSECUTIVE_UNKNOWN} consecutive series; retry later`
+          );
+        }
+        if (prevCache[series.key] == null) {
+          newCache[series.key] = { ...result, checkedAt: Date.now() };
+        }
+        continue;
+      }
+
+      unknownStreak = 0;
+      const cacheEntry = { ...result, checkedAt: Date.now() };
+      newCache[series.key] = cacheEntry;
+      const br = badgeForResult(card, series, cacheEntry, prevCache[series.key], badgeCount);
+      badgeCount = br.badgeCount;
+      if (br.nextNew || br.saleNew) {
+        badgeKeys[series.key] = {
+          ...(br.nextNew ? { next: true } : {}),
+          ...(br.saleNew ? { sale: true } : {}),
+        };
       }
     }
 
@@ -286,6 +312,7 @@
       badgeKeys,
       cacheEntries: newCache,
       failedCount,
+      unknownStreak,
       queue: updatedQueue,
     };
   }
@@ -328,6 +355,7 @@
     let processed = queue.cursor;
     let succeeded = queue.cursor;
     let failed = 0;
+    let unknownStreak = 0;
     let runState = {
       status: 'running',
       startedAt,
@@ -357,9 +385,10 @@
                 chunk,
                 prevCache,
                 currentBadgeCount: badgeCount,
+                initialUnknownStreak: unknownStreak,
                 queue,
               })
-            : await probeInline(chunk, prevCache, badgeCount, queue);
+            : await probeInline(chunk, prevCache, badgeCount, queue, unknownStreak);
 
         if (response?.done !== true) {
           throw new Error(response?.error || 'Background catalog probe chunk failed');
@@ -372,6 +401,7 @@
         }
         const chunkSucceeded = Object.keys(response.cacheEntries || {}).length;
         const chunkFailed = Number(response.failedCount) || 0;
+        unknownStreak = Number(response.unknownStreak) || 0;
         processed += chunk.length;
         succeeded += chunkSucceeded;
         failed += chunkFailed;

@@ -10,7 +10,11 @@ const offscreenSource = fs.readFileSync(
   'utf8'
 );
 
-function createHarness(seriesCount, failingKeys = new Set()) {
+function createHarness(
+  seriesCount,
+  failingKeys = new Set(),
+  { unknownKeys = new Set(), initialCache = {} } = {}
+) {
   const series = Array.from({ length: seriesCount }, (_, index) => ({
     key: `series-${String(index + 1).padStart(2, '0')}`,
     title: `Series ${index + 1}`,
@@ -20,7 +24,7 @@ function createHarness(seriesCount, failingKeys = new Set()) {
     kstBgProbeEnabled: true,
     kstCatalogPriceVersion: 7,
     kstLastScan: { series },
-    kstCatalogCache: {},
+    kstCatalogCache: { ...initialCache },
     kstBgProbeQueue: { cursor: 0, lastCycleAt: 0 },
     kstBgBadgeCount: 0,
   };
@@ -87,6 +91,7 @@ function createHarness(seriesCount, failingKeys = new Set()) {
       async probeSeries(_catalog, item) {
         probeCount += 1;
         if (failingKeys.has(item.key)) throw new Error('expected probe failure');
+        if (unknownKeys.has(item.key)) return { status: 'unknown', marker: `new-${item.key}` };
         return { status: 'no-next', marker: item.key };
       },
       reconcileCatalog(value) {
@@ -102,7 +107,7 @@ function createHarness(seriesCount, failingKeys = new Set()) {
     async run() {
       alarmListener({ name: 'kstBgProbe' });
       for (let attempt = 0; attempt < 100; attempt += 1) {
-        if (storage.kstBgProbeLastRunAt) return storage;
+        if (['completed', 'failed'].includes(storage.kstBgProbeRunState?.status)) return storage;
         await new Promise((resolve) => setImmediate(resolve));
       }
       throw new Error('background probe did not finish');
@@ -116,7 +121,7 @@ function createHarness(seriesCount, failingKeys = new Set()) {
   };
 }
 
-function createOffscreenHarness(failingKeys = new Set()) {
+function createOffscreenHarness(failingKeys = new Set(), unknownKeys = new Set()) {
   const storage = {};
   let messageListener = null;
   const chrome = {
@@ -152,6 +157,7 @@ function createOffscreenHarness(failingKeys = new Set()) {
         },
         async probeSeries(_catalog, item) {
           if (failingKeys.has(item.key)) throw new Error('expected probe failure');
+          if (unknownKeys.has(item.key)) return { status: 'unknown', marker: `new-${item.key}` };
           return { status: 'no-next', marker: item.key };
         },
         reconcileCatalog(value) {
@@ -163,14 +169,15 @@ function createOffscreenHarness(failingKeys = new Set()) {
   vm.runInNewContext(offscreenSource, context, { filename: 'offscreen.js' });
 
   return {
-    async run(chunk) {
+    async run(chunk, prevCache = {}, initialUnknownStreak = 0) {
       const response = await new Promise((resolve) => {
         messageListener(
           {
             type: 'kst:bgProbeChunk',
             chunk,
-            prevCache: {},
+            prevCache,
             currentBadgeCount: 0,
+            initialUnknownStreak,
             queue: { cursor: 0, lastCycleAt: 0, eligibleLength: chunk.length },
           },
           null,
@@ -250,7 +257,100 @@ const checks = [
         response.failedCount === 1 &&
         Object.keys(response.cacheEntries).length === 2 &&
         response.queue.cursor === 0 &&
-        Object.keys(storage.kstCatalogCache).length === 2
+        Object.keys(storage).length === 0
+      );
+    },
+  },
+  {
+    name: '既存cacheがあるシリーズの判別不能結果では既存データを更新しない',
+    run: async () => {
+      const existing = { status: 'has-next', marker: 'existing', checkedAt: 123 };
+      const storage = await createHarness(2, new Set(), {
+        unknownKeys: new Set(['series-01']),
+        initialCache: { 'series-01': existing },
+      }).run();
+      return (
+        storage.kstBgProbeRunState.status === 'completed' &&
+        storage.kstCatalogCache['series-01'].marker === 'existing' &&
+        storage.kstCatalogCache['series-01'].checkedAt === 123 &&
+        storage.kstCatalogCache['series-02'].marker === 'series-02'
+      );
+    },
+  },
+  {
+    name: '判別不能が3件連続したら失敗扱いにして成功時刻を更新しない',
+    run: async () => {
+      const initialCache = Object.fromEntries(
+        ['series-01', 'series-02', 'series-03'].map((key) => [
+          key,
+          { status: 'has-next', marker: `existing-${key}`, checkedAt: 123 },
+        ])
+      );
+      const storage = await createHarness(4, new Set(), {
+        unknownKeys: new Set(['series-01', 'series-02', 'series-03']),
+        initialCache,
+      }).run();
+      return (
+        storage.kstBgProbeRunState.status === 'failed' &&
+        storage.kstBgProbeLastRunAt === undefined &&
+        storage.kstBgProbeQueue.cursor === 0 &&
+        storage.kstCatalogCache['series-01'].marker === 'existing-series-01' &&
+        storage.kstBgProbeHistory?.[0]?.status === 'failed'
+      );
+    },
+  },
+  {
+    name: 'chunk境界をまたぐ3件連続の判別不能も失敗扱いにする',
+    run: async () => {
+      const storage = await createHarness(9, new Set(), {
+        unknownKeys: new Set(['series-07', 'series-08', 'series-09']),
+      }).run();
+      return (
+        storage.kstBgProbeRunState.status === 'failed' &&
+        storage.kstBgProbeLastRunAt === undefined &&
+        storage.kstBgProbeQueue.cursor === 8 &&
+        storage.kstCatalogCache['series-06']?.marker === 'series-06' &&
+        storage.kstCatalogCache['series-07']?.status === 'unknown' &&
+        storage.kstCatalogCache['series-08']?.status === 'unknown' &&
+        storage.kstCatalogCache['series-09'] === undefined
+      );
+    },
+  },
+  {
+    name: '正常結果を挟んだ判別不能は連続数をリセットして完走する',
+    run: async () => {
+      const storage = await createHarness(5, new Set(), {
+        unknownKeys: new Set(['series-01', 'series-02', 'series-04', 'series-05']),
+      }).run();
+      return (
+        storage.kstBgProbeRunState.status === 'completed' &&
+        storage.kstBgProbeLastRunAt > 0 &&
+        Object.keys(storage.kstCatalogCache).length === 5
+      );
+    },
+  },
+  {
+    name: 'Chrome offscreen経路でも既存cache保持と連続判別不能の失敗を適用する',
+    run: async () => {
+      const chunk = [
+        { key: 'series-01', highestVolume: 1 },
+        { key: 'series-02', highestVolume: 2 },
+      ];
+      const existing = { 'series-01': { status: 'has-next', marker: 'existing' } };
+      const preserve = await createOffscreenHarness(
+        new Set(),
+        new Set(['series-01'])
+      ).run(chunk, existing);
+      const fail = await createOffscreenHarness(
+        new Set(),
+        new Set(['series-01', 'series-02'])
+      ).run(chunk, existing, 1);
+      return (
+        preserve.response.done === true &&
+        preserve.response.cacheEntries['series-01'] === undefined &&
+        preserve.response.cacheEntries['series-02']?.marker === 'series-02' &&
+        fail.response.done === false &&
+        /indeterminate/i.test(fail.response.error)
       );
     },
   },

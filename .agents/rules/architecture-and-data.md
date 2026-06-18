@@ -43,6 +43,7 @@
 - eligible series は completed / excluded を除き、有限の `highestVolume` を持つものとする。
 - 1回の実行では対象全体を巡回し、内部的に `CHUNK_SIZE` ごとに処理する。chunk サイズを「alarm 1回の総上限」と誤解しない。
 - Chrome は service worker に DOMParser が無いため offscreen document を使う。Firefox は background scripts に shared modules を読み込み inline 処理する。
+- `status: unknown` で既存 cache がある場合は確定済みデータを上書きしない。3シリーズ連続で `unknown` になった場合はサイクルを失敗扱いにし、最終成功時刻を更新せず後続実行で再試行する。
 - cache / queue / badge の更新は、途中停止後に再開可能な順序と粒度を保つ。
 - `activeBgProbe` 相当の重複実行防止を維持し、alarm、startup catch-up、手動要求が競合しても並列巡回させない。
 - Amazon への連続リクエストには既存 delay を維持する。ユーザー設定で無制限の頻度・件数を追加しない。
