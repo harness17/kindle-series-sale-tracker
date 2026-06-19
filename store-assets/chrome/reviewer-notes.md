@@ -17,26 +17,19 @@ This extension helps users of Amazon.co.jp's Kindle store organize their purchas
 books into series, check whether follow-up volumes exist, and see prices and
 discounts — all locally in the browser, with no external server.
 
---- Changes in v0.5.0 ---
+--- Changes in v0.5.1 ---
 
-Background follow-up check stability: fixed a crash when the offscreen document
-attempted to use chrome.storage (unavailable in offscreen context). Storage writes
-now happen in the service worker after each batch response.
+Series name parsing fixes:
+- Dangling open brackets left after volume marker extraction are now stripped
+  (e.g. a title ending with "（1巻" no longer leaves "（" in the series name).
+- Ideographic space (U+3000) is now recognized as a subtitle separator. When a
+  title has the form "Subtitle　SeriesName N", the series key is extracted from
+  the right segment (e.g. "強行偵察　宇宙兵志願 ２" → series "宇宙兵志願").
+- Trailing digits directly after kanji/hiragana are now detected as volume
+  numbers (e.g. "シリーズ名2" → volume 2). Katakana endings are excluded to
+  preserve titles like "エリア88".
 
-Badge detail: when the background check finds new sequels or sales, the side panel
-now shows which specific series triggered the notification. Notified series sort to
-the top and display "NEW sequel" / "NEW sale" badges until the panel is opened.
-
-Probe run history: the options page shows the last 20 background check results
-(completed, failed, interrupted). Interrupted runs from service worker restarts are
-detected and recorded on wake.
-
-Auto-scan display fix: the side panel and options page now use consistent staleness
-logic for the last-run / next-due display.
-
-UI: reorganized controls into a collapsible panel; added CSV export range option.
-
-No new permissions. No new external network access.
+No new permissions. No new external network access. Internal parsing only.
 
 --- Network access ---
 
@@ -103,8 +96,8 @@ License: MIT
 
 ## Checklist before submitting
 
-- [ ] The submitted ZIP matches the source at the commit tagged `v0.5.0`
-- [ ] `manifest.json` version field reads `0.5.0`
+- [ ] The submitted ZIP matches the source at the commit tagged `v0.5.1`
+- [ ] `manifest.json` version field reads `0.5.1`
 - [ ] No `CLAUDE_CODE_HANDOFF.md` or personal data files in the ZIP (verified by build script)
 - [ ] Host permission justification text in listing-en.md is copied to the Privacy tab
 - [ ] "Remote code usage" is set to No

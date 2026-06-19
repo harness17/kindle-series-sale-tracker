@@ -8,24 +8,21 @@ Copy the text block below verbatim into the submission form.
 ## Submission text (copy as-is)
 
 ```text
-Thank you for reviewing Kindle Series Sale Tracker v0.5.0.
+Thank you for reviewing Kindle Series Sale Tracker v0.5.1.
 
---- Changes in v0.5.0 ---
+--- Changes in v0.5.1 ---
 
-Badge detail: when the background check finds new sequels or sales, the sidebar
-now shows which specific series triggered the notification. Notified series sort
-to the top and display "NEW sequel" / "NEW sale" badges until the panel is opened.
+Series name parsing fixes:
+- Dangling open brackets left after volume marker extraction are now stripped
+  (e.g. a title ending with "（1巻" no longer leaves "（" in the series name).
+- Ideographic space (U+3000) is now recognized as a subtitle separator. When a
+  title has the form "Subtitle　SeriesName N", the series key is extracted from
+  the right segment (e.g. "強行偵察　宇宙兵志願 ２" → series "宇宙兵志願").
+- Trailing digits directly after kanji/hiragana are now detected as volume
+  numbers (e.g. "シリーズ名2" → volume 2). Katakana endings are excluded to
+  preserve titles like "エリア88".
 
-Probe run history: the options page shows the last 20 background check results
-(completed, failed, interrupted). Interrupted runs from background script restarts
-are detected and recorded on wake.
-
-Auto-scan display fix: the sidebar and options page now use consistent staleness
-logic for the last-run / next-due display.
-
-UI: reorganized controls into a collapsible panel; added CSV export range option.
-
-No new permissions. No new external network access.
+No new permissions. No new external network access. Internal parsing only.
 
 --- Purpose ---
 
@@ -90,8 +87,8 @@ Source: https://github.com/harness17/kindle-series-sale-tracker (MIT)
 
 ## Checklist before submitting
 
-- [ ] The submitted ZIP matches the source at the commit tagged `v0.5.0`
-- [ ] `manifest.json` version field reads `0.5.0`
+- [ ] The submitted ZIP matches the source at the commit tagged `v0.5.1`
+- [ ] `manifest.json` version field reads `0.5.1`
 - [ ] No `CLAUDE_CODE_HANDOFF.md` or personal data files in the ZIP (excluded by build script)
 - [ ] `data_collection_permissions.required` is `["none"]` in `browser_specific_settings`
 - [ ] Source URL in the notes matches the public GitHub repository
