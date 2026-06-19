@@ -7,7 +7,20 @@
 | Firefox Add-ons (AMO) | Notes to Reviewer | 3,000 文字 |
 | Chrome Web Store | Test Instructions | 4,000 文字（目安） |
 
-reviewer-notes.md の `Submission text` ブロックはこの上限内に収める。超過していたら圧縮してから提出用テキストとして提示する。
+reviewer-notes.md の `Submission text` ブロックを更新したら、必ず文字数を計測する。
+
+```powershell
+# Submission text ブロックの文字数を計測する
+$f = Get-Content -Raw store-assets/firefox/reviewer-notes.md
+$m = [regex]::Match($f, '(?s)```text\r?\n(.+?)\r?\n```')
+Write-Host "Firefox: $($m.Groups[1].Value.Length) / 3000"
+
+$c = Get-Content -Raw store-assets/chrome/reviewer-notes.md
+$mc = [regex]::Match($c, '(?s)```text\r?\n(.+?)\r?\n```')
+Write-Host "Chrome:  $($mc.Groups[1].Value.Length) / 4000"
+```
+
+超過している場合は、下記「構成の優先順位」の下位項目から圧縮・省略して上限内に収める。上限を超えたままコミット・提出しない。
 
 ## 構成の優先順位
 
