@@ -54,24 +54,15 @@ scoped to: .../hz/mycd/digital-console/contentlist/booksAll*
 --- How to test ---
 
 Requires an Amazon.co.jp account with Kindle books. No test account is provided;
-the extension uses the reviewer's session and never collects credentials.
+the extension uses the reviewer's own session. Credentials are never collected.
 
 1. Install → open Firefox sidebar "Kindle Series Sale Tracker"
-2. Open amazon.co.jp/hz/mycd/digital-console/contentlist/booksAll/dateDsc/
-3. Click "全件取得" (Scan Library)
-4. Click "再確認" (Check) on any series
-5. Open "専用ページ" → "自動化"
-6. Enable the background check and auto-scan options. The status area immediately
-   shows enabled state and the next scheduled time.
-7. A scheduled background cycle shows running progress as processed/total, then
-   completed or failed status. It checks all eligible series, even above 8.
-8. Auto-scan is evaluated when the Kindle library page is visited. Its status
-   records checking, running, completed, failed, or the exact skip reason.
-9. The background check history section shows the last 20 run results.
-10. Use the JA/EN toggle in the sidebar header to test both UI languages.
-
-The minimum background interval is 12 hours and the minimum auto-scan interval is
-3 days. Manual library and follow-up checks can be tested without waiting.
+2. Visit amazon.co.jp/hz/mycd/digital-console/contentlist/booksAll/dateDsc/
+3. Click "全件取得" (Scan Library) → series list appears
+4. Click "再確認" (Check) on any series → price/sequel info shown
+5. Open "専用ページ" → enable background check and auto-scan
+6. Background check runs all eligible series; history shows last 20 results
+7. JA/EN toggle in sidebar header switches UI language
 
 Source: https://github.com/harness17/kindle-series-sale-tracker (MIT)
 ```
