@@ -556,6 +556,52 @@ const checks = [
         JSON.stringify(g.ownedVolumes) === JSON.stringify([1, 2, 3]);
     })(),
   },
+  {
+    name: '巻マーカー切断で残る開き括弧を末尾から除去する（妹はアメリカ人!?（1巻）',
+    ok: (() => {
+      const r = splitSeriesAndVolume('妹はアメリカ人!?（1巻');
+      return r.seriesKey === '妹はアメリカ人!?' && r.volume === 1;
+    })(),
+  },
+  {
+    name: '全角スペースを副題区切りとして右側からシリーズ名を取る（宇宙兵志願）',
+    ok: (() => {
+      const r = splitSeriesAndVolume('強行偵察　宇宙兵志願 ２ (ハヤカワ文庫SF)');
+      return r.seriesKey === '宇宙兵志願' && r.volume === 2 && r.imprint === 'ハヤカワ文庫SF';
+    })(),
+  },
+  {
+    name: '全角スペース副題ありの複数巻を同一シリーズに統合する',
+    ok: (() => {
+      const series = buildSeriesSummary([
+        { title: '宇宙兵志願 (ハヤカワ文庫SF)', authors: ['ジョン・スコルジー'], asin: 'SH1' },
+        { title: '強行偵察　宇宙兵志願 ２ (ハヤカワ文庫SF)', authors: ['ジョン・スコルジー'], asin: 'SH2' },
+      ]);
+      return series.length === 1 && series[0].key === '宇宙兵志願' &&
+        JSON.stringify(series[0].ownedVolumes) === JSON.stringify([1, 2]);
+    })(),
+  },
+  {
+    name: '全角スペースがなければ従来通りフルタイトルから巻数を取る',
+    ok: (() => {
+      const r = splitSeriesAndVolume('鬼滅の刃 1');
+      return r.seriesKey === '鬼滅の刃' && r.volume === 1;
+    })(),
+  },
+  {
+    name: '漢字直結の末尾裸数字を巻数として認識する（宇宙兵志願2）',
+    ok: (() => {
+      const r = splitSeriesAndVolume('宇宙兵志願2');
+      return r.seriesKey === '宇宙兵志願' && r.volume === 2;
+    })(),
+  },
+  {
+    name: 'カタカナ末尾の数字はタイトルの一部として巻数扱いしない（エリア88）',
+    ok: (() => {
+      const r = splitSeriesAndVolume('エリア88');
+      return r.seriesKey === 'エリア88' && r.volume === null;
+    })(),
+  },
 ];
 
 let allOk = true;

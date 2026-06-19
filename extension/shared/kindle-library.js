@@ -80,7 +80,9 @@
       .replace(/\bkindle版\b/gi, '')
       .replace(/\b電子書籍\b/g, '')
       .replace(/\s+/g, ' ')
-      .replace(/[ \t　:：\-―—~～]+$/g, '')
+      // 巻マーカー切断で残る開き括弧・区切り文字を末尾から除去する。
+      // 閉じ括弧（）】」等は副題の括弧として正当なため含めない。
+      .replace(/[ \t　:：\-―—~～（(「【・／/]+$/g, '')
       .trim();
   }
 
@@ -186,6 +188,17 @@
       return { seriesKey: stripBoxSetNoise(title), volume: null, imprint: '' };
     }
 
+    // 全角スペース（U+3000）を副題区切りとみなし、右側からシリーズ名+巻数を優先抽出する。
+    // 例: "強行偵察　宇宙兵志願 ２ (ハヤカワ文庫SF)" → 右 "宇宙兵志願 ２ …" → "宇宙兵志願"
+    const rawStr = String(rawTitle || '');
+    const ideoSpaceIdx = rawStr.lastIndexOf('　');
+    if (ideoSpaceIdx > 0) {
+      const rightResult = splitSeriesAndVolume(rawStr.slice(ideoSpaceIdx + 1));
+      if (rightResult.volume !== null && rightResult.seriesKey.length >= 2) {
+        return rightResult;
+      }
+    }
+
     let marker = null; // { headLen, volume, tokenEnd }
 
     // 強い巻マーカー: （N） / 第N巻 / vol.N。最も手前の出現位置を採用する。
@@ -219,6 +232,20 @@
       }
     }
 
+    // 最弱の巻マーカー: 漢字・ひらがなに直結する末尾の裸数字。
+    // 「宇宙兵志願2」のように空白区切りなしで巻数が付くタイトル用。
+    // カタカナ末尾（エリア88, ゴルゴ13 等）はタイトルの一部のため除外する。
+    if (marker === null) {
+      const match = title.match(/^(.+[一-鿿぀-ゟ])(\d{1,3})$/);
+      if (match) {
+        marker = {
+          headLen: match[1].length,
+          volume: Number(match[2]),
+          tokenEnd: title.length,
+        };
+      }
+    }
+
     if (marker === null) {
       return { seriesKey: stripSeriesHeadNoise(stripUnnumberedTitleNoise(title)), volume: null, imprint: '' };
     }
@@ -245,7 +272,9 @@
           .map(normalizeText)
           .filter(Boolean);
 
-    const { seriesKey, volume, imprint } = splitSeriesAndVolume(title);
+    // splitSeriesAndVolume は内部で normalizeText するため、原タイトルを渡す。
+    // 正規化後を渡すと全角スペース（副題区切り）の情報が消える。
+    const { seriesKey, volume, imprint } = splitSeriesAndVolume(item.title);
 
     return {
       title,
