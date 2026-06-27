@@ -224,6 +224,7 @@
     });
   }
 
+  // バッジはシリーズ単位でカウントする（続刊+セール同時でも+1）
   function badgeForResult(card, series, cacheEntry, prevEntry, currentCount) {
     let badgeCount = currentCount;
     let nextNew = false;
@@ -231,13 +232,12 @@
     const reconciled = card.reconcileCatalog(cacheEntry, series.highestVolume);
     const prevReconciled = card.reconcileCatalog(prevEntry, series.highestVolume);
     if (card.isConfirmedHasNext(reconciled) && !card.isConfirmedHasNext(prevReconciled)) {
-      badgeCount += 1;
       nextNew = true;
     }
     if (card.discountValue(reconciled) > 0 && card.discountValue(prevReconciled) <= 0) {
-      badgeCount += 1;
       saleNew = true;
     }
+    if (nextNew || saleNew) badgeCount += 1;
     return { badgeCount, nextNew, saleNew };
   }
 

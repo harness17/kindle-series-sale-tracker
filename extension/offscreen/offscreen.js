@@ -66,16 +66,20 @@
       const cacheEntry = { ...result, checkedAt: Date.now() };
       newCache[series.key] = cacheEntry;
 
+      // バッジはシリーズ単位でカウントする（続刊+セール同時でも+1）
       const reconciled = card.reconcileCatalog(cacheEntry, series.highestVolume);
       const prevReconciled = card.reconcileCatalog(prevCache[series.key], series.highestVolume);
+      let nextNew = false;
+      let saleNew = false;
       if (card.isConfirmedHasNext(reconciled) && !card.isConfirmedHasNext(prevReconciled)) {
-        badgeCount += 1;
+        nextNew = true;
         badgeKeys[series.key] = { ...(badgeKeys[series.key] || {}), next: true };
       }
       if (card.discountValue(reconciled) > 0 && card.discountValue(prevReconciled) <= 0) {
-        badgeCount += 1;
+        saleNew = true;
         badgeKeys[series.key] = { ...(badgeKeys[series.key] || {}), sale: true };
       }
+      if (nextNew || saleNew) badgeCount += 1;
     }
 
     const updatedQueue = nextQueue(message.queue || {}, chunk.length);

@@ -12,13 +12,19 @@
   // 同一シリーズ判定は正規化 seriesKey の完全一致のみ。
   // 部分一致にすると「小林さんちのメイドラゴン」が「…エルマのＯＬ日記」等の
   // スピンオフを同一シリーズと誤判定して続刊照合がごっちゃになるため避ける。
+  // 全角スペース分割で副題部分のみになった候補と、半角スペース連結のフルタイトルを照合するため、
+  // 完全一致に加えて末尾一致も許容する（短い側が3文字以上の場合のみ）。
   function sameSeries(a, b) {
     if (!a || !b) return false;
     const normalizeKey = (value) =>
       kdl.normalizeSeriesKey(value).replace(/\s+/g, '').replace(/[-‐－―—~～]+$/g, '');
     const na = normalizeKey(a);
     const nb = normalizeKey(b);
-    return na !== '' && na === nb;
+    if (na === '' || nb === '') return false;
+    if (na === nb) return true;
+    const shorter = na.length <= nb.length ? na : nb;
+    const longer = na.length <= nb.length ? nb : na;
+    return shorter.length >= 3 && longer.endsWith(shorter);
   }
 
   // 単話版・分冊版（1話ずつの配信）を見分ける。所有しているのは単行本（巻）なので、
