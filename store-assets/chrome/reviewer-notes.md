@@ -17,19 +17,19 @@ This extension helps users of Amazon.co.jp's Kindle store organize their purchas
 books into series, check whether follow-up volumes exist, and see prices and
 discounts — all locally in the browser, with no external server.
 
---- Changes in v0.5.1 ---
+--- Changes in v0.5.2 ---
 
-Series name parsing fixes:
-- Dangling open brackets left after volume marker extraction are now stripped
-  (e.g. a title ending with "（1巻" no longer leaves "（" in the series name).
-- Ideographic space (U+3000) is now recognized as a subtitle separator. When a
-  title has the form "Subtitle　SeriesName N", the series key is extracted from
-  the right segment (e.g. "強行偵察　宇宙兵志願 ２" → series "宇宙兵志願").
-- Trailing digits directly after kanji/hiragana are now detected as volume
-  numbers (e.g. "シリーズ名2" → volume 2). Katakana endings are excluded to
-  preserve titles like "エリア88".
+Bug fixes:
+- Badge count now matches the number of series shown as NEW in the side panel.
+  Previously, a single series with both a new sequel and a new sale incremented
+  the badge by 2 while only one NEW marker appeared.
+- Series matching for follow-up volume detection now handles titles where
+  Amazon uses an ideographic space (U+3000) in search results but a regular
+  space in the owned title (e.g. "異修羅　新魔王戦争" vs "異修羅 新魔王戦争").
+- NEW badge layout no longer compresses the series title when multiple badges
+  (NEW Sequel + NEW Sale + book count) appear on the same row.
 
-No new permissions. No new external network access. Internal parsing only.
+No new permissions. No new external network access.
 
 --- Network access ---
 
@@ -96,8 +96,8 @@ License: MIT
 
 ## Checklist before submitting
 
-- [ ] The submitted ZIP matches the source at the commit tagged `v0.5.1`
-- [ ] `manifest.json` version field reads `0.5.1`
+- [ ] The submitted ZIP matches the source at the commit tagged `v0.5.2`
+- [ ] `manifest.json` version field reads `0.5.2`
 - [ ] No `CLAUDE_CODE_HANDOFF.md` or personal data files in the ZIP (verified by build script)
 - [ ] Host permission justification text in listing-en.md is copied to the Privacy tab
 - [ ] "Remote code usage" is set to No

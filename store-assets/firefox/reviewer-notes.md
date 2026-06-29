@@ -8,21 +8,20 @@ Copy the text block below verbatim into the submission form.
 ## Submission text (copy as-is)
 
 ```text
-Thank you for reviewing Kindle Series Sale Tracker v0.5.1.
+Thank you for reviewing Kindle Series Sale Tracker v0.5.2.
 
---- Changes in v0.5.1 ---
+--- Changes in v0.5.2 ---
 
-Series name parsing fixes:
-- Dangling open brackets left after volume marker extraction are now stripped
-  (e.g. a title ending with "（1巻" no longer leaves "（" in the series name).
-- Ideographic space (U+3000) is now recognized as a subtitle separator. When a
-  title has the form "Subtitle　SeriesName N", the series key is extracted from
-  the right segment (e.g. "強行偵察　宇宙兵志願 ２" → series "宇宙兵志願").
-- Trailing digits directly after kanji/hiragana are now detected as volume
-  numbers (e.g. "シリーズ名2" → volume 2). Katakana endings are excluded to
-  preserve titles like "エリア88".
+Bug fixes:
+- Badge count now matches the number of series shown as NEW in the sidebar.
+  Previously, one series with both a new sequel and a new sale incremented the
+  badge by 2 while only one NEW marker appeared.
+- Series matching now handles titles where Amazon uses an ideographic space
+  (U+3000) in search results but a regular space in the owned title.
+- NEW badge layout no longer compresses the series title when multiple badges
+  appear on the same row.
 
-No new permissions. No new external network access. Internal parsing only.
+No new permissions. No new external network access.
 
 --- Purpose ---
 
@@ -78,8 +77,8 @@ Source: https://github.com/harness17/kindle-series-sale-tracker (MIT)
 
 ## Checklist before submitting
 
-- [ ] The submitted ZIP matches the source at the commit tagged `v0.5.1`
-- [ ] `manifest.json` version field reads `0.5.1`
+- [ ] The submitted ZIP matches the source at the commit tagged `v0.5.2`
+- [ ] `manifest.json` version field reads `0.5.2`
 - [ ] No `CLAUDE_CODE_HANDOFF.md` or personal data files in the ZIP (excluded by build script)
 - [ ] `data_collection_permissions.required` is `["none"]` in `browser_specific_settings`
 - [ ] Source URL in the notes matches the public GitHub repository
