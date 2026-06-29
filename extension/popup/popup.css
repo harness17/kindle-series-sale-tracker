@@ -311,16 +311,18 @@ button:hover {
 
 .series-title {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
   margin-bottom: 4px;
 }
 
 .title-badges {
   display: flex;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 4px;
   align-items: center;
+  margin-left: auto;
 }
 
 .series-title strong {
@@ -333,6 +335,7 @@ button:hover {
 
 .badge {
   flex: 0 0 auto;
+  white-space: nowrap;
   border-radius: 999px;
   background: var(--badge-info-bg);
   color: var(--badge-info-fg);
