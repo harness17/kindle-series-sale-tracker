@@ -8,18 +8,20 @@ Copy the text block below verbatim into the submission form.
 ## Submission text (copy as-is)
 
 ```text
-Thank you for reviewing Kindle Series Sale Tracker v0.5.2.
+Thank you for reviewing Kindle Series Sale Tracker v0.5.3.
 
---- Changes in v0.5.2 ---
+--- Changes in v0.5.3 ---
 
-Bug fixes:
-- Badge count now matches the number of series shown as NEW in the sidebar.
-  Previously, one series with both a new sequel and a new sale incremented the
-  badge by 2 while only one NEW marker appeared.
-- Series matching now handles titles where Amazon uses an ideographic space
-  (U+3000) in search results but a regular space in the owned title.
-- NEW badge layout no longer compresses the series title when multiple badges
-  appear on the same row.
+New:
+- Two extra sort orders in the sidebar and popup: next volume price (lowest
+  first) and follow-up last-checked date (newest first). Both reorder data
+  already stored locally; no extra requests are made.
+
+Fixes:
+- Bulk follow-up recheck no longer overwrites a confirmed result with an
+  indeterminate one, so a temporary search hiccup cannot erase known data.
+- Bulk follow-up recheck stops after 3 consecutive indeterminate results and
+  asks the user to retry later.
 
 No new permissions. No new external network access.
 
@@ -73,12 +75,12 @@ Source: https://github.com/harness17/kindle-series-sale-tracker (MIT)
 | AMO submission field | Content |
 |---|---|
 | "Notes to Reviewer" | Paste the text block above |
-| Character limit | AMO allows up to ~4 000 characters. The block above is within limit. |
+| Character limit | AMO allows up to 3,000 characters. The block above is within limit. |
 
 ## Checklist before submitting
 
-- [ ] The submitted ZIP matches the source at the commit tagged `v0.5.2`
-- [ ] `manifest.json` version field reads `0.5.2`
+- [ ] The submitted ZIP matches the source at the commit tagged `v0.5.3`
+- [ ] `manifest.json` version field reads `0.5.3`
 - [ ] No `CLAUDE_CODE_HANDOFF.md` or personal data files in the ZIP (excluded by build script)
 - [ ] `data_collection_permissions.required` is `["none"]` in `browser_specific_settings`
 - [ ] Source URL in the notes matches the public GitHub repository

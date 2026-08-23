@@ -17,17 +17,20 @@ This extension helps users of Amazon.co.jp's Kindle store organize their purchas
 books into series, check whether follow-up volumes exist, and see prices and
 discounts — all locally in the browser, with no external server.
 
---- Changes in v0.5.2 ---
+--- Changes in v0.5.3 ---
+
+New features:
+- Two additional sort orders in the side panel and the popup: next volume
+  price (lowest first) and follow-up last-checked date (newest first).
+  Both sort data that is already stored locally; no extra requests are made.
 
 Bug fixes:
-- Badge count now matches the number of series shown as NEW in the side panel.
-  Previously, a single series with both a new sequel and a new sale incremented
-  the badge by 2 while only one NEW marker appeared.
-- Series matching for follow-up volume detection now handles titles where
-  Amazon uses an ideographic space (U+3000) in search results but a regular
-  space in the owned title (e.g. "異修羅　新魔王戦争" vs "異修羅 新魔王戦争").
-- NEW badge layout no longer compresses the series title when multiple badges
-  (NEW Sequel + NEW Sale + book count) appear on the same row.
+- Bulk follow-up recheck no longer overwrites a confirmed result with an
+  indeterminate one, so a temporary search hiccup can no longer erase
+  price or sequel data that was already known.
+- Bulk follow-up recheck now stops after 3 consecutive indeterminate
+  results and asks the user to retry later, instead of running through the
+  whole list against an unresponsive search page.
 
 No new permissions. No new external network access.
 
@@ -96,8 +99,8 @@ License: MIT
 
 ## Checklist before submitting
 
-- [ ] The submitted ZIP matches the source at the commit tagged `v0.5.2`
-- [ ] `manifest.json` version field reads `0.5.2`
+- [ ] The submitted ZIP matches the source at the commit tagged `v0.5.3`
+- [ ] `manifest.json` version field reads `0.5.3`
 - [ ] No `CLAUDE_CODE_HANDOFF.md` or personal data files in the ZIP (verified by build script)
 - [ ] Host permission justification text in listing-en.md is copied to the Privacy tab
 - [ ] "Remote code usage" is set to No
