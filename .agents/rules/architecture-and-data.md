@@ -28,6 +28,7 @@
   - alarm、全件バックグラウンド巡回、重複実行防止、badge、Chrome DOMParser bridge
 - `extension/popup/` / `extension/options/`
   - 保存済み結果・状態の表示、ユーザー設定、手動操作
+  - options の一括続刊再確認は、`status: unknown` で既存 cache がある場合に確定済みデータを上書きしない。3件連続で `unknown` の場合は一括処理を停止し、時間をおいて再実行できる失敗として扱う。
 
 ## スキャン契約
 

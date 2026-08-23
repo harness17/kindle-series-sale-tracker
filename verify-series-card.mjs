@@ -4,6 +4,9 @@ const require = createRequire(import.meta.url);
 const {
   discountValue,
   formatRanges,
+  nextUnknownProbeState,
+  priceValue,
+  resolveProbeCacheWrite,
   resolvePrimaryOffer,
 } = require('./extension/shared/series-card.js');
 
@@ -115,6 +118,73 @@ const checks = [
   {
     name: 'formatRanges は単巻と連番レンジを整形する',
     ok: formatRanges([[1, 3], [5, 5], [7, 9]]) === '1-3, 5, 7-9',
+  },
+  {
+    name: 'priceValue は次巻価格を数値で返す',
+    ok: priceValue(hasNext) === 396,
+  },
+  {
+    name: 'priceValue はカンマ区切り価格も数値化する',
+    ok: priceValue({ status: 'has-next', nextPriceText: '¥1,234', nextVolume: 2, nextTitle: 'x', nextUrl: 'u' }) === 1234,
+  },
+  {
+    name: 'priceValue は no-next で Infinity を返す',
+    ok: priceValue(noNext) === Infinity,
+  },
+  {
+    name: 'priceValue は null で Infinity を返す',
+    ok: priceValue(null) === Infinity,
+  },
+  {
+    name: 'resolveProbeCacheWrite は既存 cache を unknown で上書きしない',
+    ok: (() => {
+      const previous = { ...hasNext, checkedAt: 100 };
+      const write = resolveProbeCacheWrite(previous, { status: 'unknown' }, 200);
+      return write.shouldStore === false && write.cacheEntry === previous;
+    })(),
+  },
+  {
+    name: 'resolveProbeCacheWrite は既存 cache がない unknown を保存対象にする',
+    ok: (() => {
+      const write = resolveProbeCacheWrite(null, { status: 'unknown' }, 300);
+      return (
+        write.shouldStore === true &&
+        write.cacheEntry.status === 'unknown' &&
+        write.cacheEntry.checkedAt === 300
+      );
+    })(),
+  },
+  {
+    name: 'resolveProbeCacheWrite は判定済み結果を checkedAt 付きで保存対象にする',
+    ok: (() => {
+      const write = resolveProbeCacheWrite(hasNext, noNext, 400);
+      return (
+        write.shouldStore === true &&
+        write.cacheEntry.status === 'no-next' &&
+        write.cacheEntry.checkedAt === 400
+      );
+    })(),
+  },
+  {
+    name: 'nextUnknownProbeState は unknown 3連続で失敗扱いにする',
+    ok: (() => {
+      const first = nextUnknownProbeState({ status: 'unknown' }, 0);
+      const second = nextUnknownProbeState({ status: 'unknown' }, first.unknownStreak);
+      const third = nextUnknownProbeState({ status: 'unknown' }, second.unknownStreak);
+      return (
+        first.failed === false &&
+        second.failed === false &&
+        third.failed === true &&
+        third.unknownStreak === 3
+      );
+    })(),
+  },
+  {
+    name: 'nextUnknownProbeState は判定済み結果で unknown 連続数をリセットする',
+    ok: (() => {
+      const state = nextUnknownProbeState({ status: 'has-next' }, 2);
+      return state.failed === false && state.unknownStreak === 0;
+    })(),
   },
 ];
 

@@ -459,6 +459,23 @@
         if (d !== 0) return d;
         return a.title.localeCompare(b.title, 'ja');
       }
+      if (by === 'price') {
+        const pa = card.priceValue(catalogFor(a));
+        const pb = card.priceValue(catalogFor(b));
+        if (pa !== pb) return pa - pb;
+        return a.title.localeCompare(b.title, 'ja');
+      }
+      if (by === 'checkedAt') {
+        // 続刊ありを上位に、checkedAt 降順。続刊なし・未照会は末尾。
+        const ca = catalogFor(a);
+        const cb = catalogFor(b);
+        const aHas = ca?.status === 'has-next' ? 1 : 0;
+        const bHas = cb?.status === 'has-next' ? 1 : 0;
+        if (bHas !== aHas) return bHas - aHas;
+        const d = (cb?.checkedAt || 0) - (ca?.checkedAt || 0);
+        if (d !== 0) return d;
+        return a.title.localeCompare(b.title, 'ja');
+      }
       if ((b.count || 0) !== (a.count || 0)) return (b.count || 0) - (a.count || 0);
       return a.title.localeCompare(b.title, 'ja');
     });
@@ -688,11 +705,23 @@
     els.checkSimple.disabled = triggerButton !== els.checkSimple;
 
     let done = 0;
+    let unknownStreak = 0;
+    let indeterminateFailure = false;
     for (const s of targets) {
       if (bulkAbort) break;
       done += 1;
       els.summary.textContent = t('bulkProgress', label, done, targets.length);
-      cache[s.key] = { ...(await probeSeries(s)), checkedAt: Date.now() };
+      const result = await probeSeries(s);
+      const unknownState = card.nextUnknownProbeState(result, unknownStreak);
+      unknownStreak = unknownState.unknownStreak;
+      if (unknownState.failed) {
+        indeterminateFailure = true;
+        break;
+      }
+      const cacheWrite = card.resolveProbeCacheWrite(cache[s.key], result, Date.now());
+      if (cacheWrite.shouldStore) {
+        cache[s.key] = cacheWrite.cacheEntry;
+      }
       if (done % 20 === 0) await chrome.storage.local.set({ [CACHE_KEY]: cache });
       if (done % 5 === 0) render();
       if (done < targets.length) {
@@ -709,6 +738,9 @@
     render();
 
     let msg = t('bulkSummaryMsg', series.length, done, label);
+    if (indeterminateFailure) {
+      msg = t('bulkIndeterminateFailed', card.MAX_CONSECUTIVE_UNKNOWN);
+    }
     if (bulkAbort) msg += t('bulkAborted');
     els.summary.textContent = msg;
   }

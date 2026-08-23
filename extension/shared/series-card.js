@@ -7,6 +7,8 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
+  const MAX_CONSECUTIVE_UNKNOWN = 3;
+
   function seriesSearchUrl(seriesKey, author) {
     const query = encodeURIComponent(`${seriesKey} ${author ? `${author} ` : ''}Kindle`);
     return `https://www.amazon.co.jp/s?k=${query}&i=digital-text`;
@@ -47,6 +49,40 @@
   function discountValue(cached) {
     const offer = resolvePrimaryOffer(cached);
     return offer && offer.discountRate ? offer.discountRate : -1;
+  }
+
+  // 次巻の価格を数値で返す。価格不明は Infinity（ソートで末尾に回す）。
+  function priceValue(cached) {
+    var offer = resolvePrimaryOffer(cached);
+    if (!offer || !offer.priceText) return Infinity;
+    var m = String(offer.priceText).replace(/,/g, '').match(/(\d+)/);
+    return m ? Number(m[1]) : Infinity;
+  }
+
+  function resolveProbeCacheWrite(previousEntry, result, checkedAt) {
+    // 一時的な検索結果不定で、確定済みの続刊/セール情報を失わないため。
+    if (result && result.status === 'unknown' && previousEntry != null) {
+      return { shouldStore: false, cacheEntry: previousEntry };
+    }
+    return {
+      shouldStore: true,
+      cacheEntry: { ...(result || { status: 'unknown' }), checkedAt },
+    };
+  }
+
+  function nextUnknownProbeState(result, currentStreak, maxConsecutiveUnknown) {
+    const limit = Number.isFinite(maxConsecutiveUnknown)
+      ? maxConsecutiveUnknown
+      : MAX_CONSECUTIVE_UNKNOWN;
+    if (!result || result.status !== 'unknown') {
+      return { unknownStreak: 0, failed: false, limit };
+    }
+    const unknownStreak = (Number(currentStreak) || 0) + 1;
+    return {
+      unknownStreak,
+      failed: unknownStreak >= limit,
+      limit,
+    };
   }
 
   function appendBadge(targetEl, className, text) {
@@ -242,13 +278,17 @@
   }
 
   return {
+    MAX_CONSECUTIVE_UNKNOWN,
     discountValue,
     formatRanges,
     isConfirmedHasNext,
+    nextUnknownProbeState,
+    priceValue,
     probeSeries,
     probeSeriesWithUrl,
     reconcileCatalog,
     renderStatusBlock,
+    resolveProbeCacheWrite,
     resolvePrimaryOffer,
     seriesSearchUrl,
     withClosingDashSeriesKey,

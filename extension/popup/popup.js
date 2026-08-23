@@ -307,6 +307,18 @@
         const d = card.discountValue(b.catalog) - card.discountValue(a.catalog);
         if (d !== 0) return d;
       }
+      if (by === 'price') {
+        const pa = card.priceValue(a.catalog);
+        const pb = card.priceValue(b.catalog);
+        if (pa !== pb) return pa - pb;
+      }
+      if (by === 'checkedAt') {
+        const aHas = a.catalog?.status === 'has-next' ? 1 : 0;
+        const bHas = b.catalog?.status === 'has-next' ? 1 : 0;
+        if (bHas !== aHas) return bHas - aHas;
+        const d = (b.catalog?.checkedAt || 0) - (a.catalog?.checkedAt || 0);
+        if (d !== 0) return d;
+      }
       const p = Number(b.priority) - Number(a.priority);
       if (p !== 0) return p;
       return a.title.localeCompare(b.title, 'ja');
