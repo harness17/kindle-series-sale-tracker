@@ -4,6 +4,7 @@ const require = createRequire(import.meta.url);
 const {
   discountValue,
   formatRanges,
+  isSaleImproved,
   nextUnknownProbeState,
   priceValue,
   resolveProbeCacheWrite,
@@ -52,6 +53,20 @@ const legacyHasNext = {
   latestPriceText: '￥500',
   latestDiscountRate: 20,
 };
+
+// 割引率だけを変えた has-next エントリを作る（isSaleImproved の比較対象用）。
+function saleEntry(discountRate, volume = 4) {
+  return {
+    status: 'has-next',
+    nextVolume: volume,
+    nextTitle: `サンプル冒険譚 ${volume}`,
+    nextUrl: 'next-url',
+    nextPriceText: '￥396',
+    nextListPriceText: '￥792',
+    nextDiscountRate: discountRate,
+    latestVolume: volume,
+  };
+}
 
 const checks = [
   {
@@ -114,6 +129,32 @@ const checks = [
       discountValue(noNext) === -1 &&
       discountValue({ status: 'no-next', latestPriceText: '￥500' }) === -1 &&
       discountValue(null) === -1,
+  },
+  {
+    name: 'isSaleImproved は新規セールを検知する',
+    ok:
+      isSaleImproved(saleEntry(30), saleEntry(null)) === true &&
+      isSaleImproved(saleEntry(30), null) === true,
+  },
+  {
+    name: 'isSaleImproved は割引率が5ポイント以上上がったら検知する',
+    ok: isSaleImproved(saleEntry(50), saleEntry(20)) === true,
+  },
+  {
+    name: 'isSaleImproved は5ポイント未満の微増を検知しない',
+    ok: isSaleImproved(saleEntry(22), saleEntry(20)) === false,
+  },
+  {
+    name: 'isSaleImproved は割引率の下落とセール終了を検知しない',
+    ok:
+      isSaleImproved(saleEntry(20), saleEntry(50)) === false &&
+      isSaleImproved(saleEntry(null), saleEntry(50)) === false,
+  },
+  {
+    name: 'isSaleImproved は巻が変わっても割引率だけで比較する',
+    ok:
+      isSaleImproved(saleEntry(30, 5), saleEntry(null, 4)) === true &&
+      isSaleImproved(saleEntry(30, 5), saleEntry(50, 4)) === false,
   },
   {
     name: 'formatRanges は単巻と連番レンジを整形する',

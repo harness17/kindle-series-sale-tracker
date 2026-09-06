@@ -9,6 +9,10 @@
 
   const MAX_CONSECUTIVE_UNKNOWN = 3;
 
+  // 割引率は Math.round とクーポン文言の有無で±1〜2ポイント揺れるため、
+  // 誤検出を避けて一定幅以上の上昇だけをセール更新として扱う。
+  const MIN_SALE_IMPROVEMENT_POINTS = 5;
+
   function seriesSearchUrl(seriesKey, author) {
     const query = encodeURIComponent(`${seriesKey} ${author ? `${author} ` : ''}Kindle`);
     return `https://www.amazon.co.jp/s?k=${query}&i=digital-text`;
@@ -49,6 +53,16 @@
   function discountValue(cached) {
     const offer = resolvePrimaryOffer(cached);
     return offer && offer.discountRate ? offer.discountRate : -1;
+  }
+
+  // セール通知の対象判定。新規セール（割引なし→割引あり）に加え、既存セールの割引率上昇も拾う。
+  // 巻が変わった場合も割引率だけで比較する（続刊の出現自体は isConfirmedHasNext 側が拾うため）。
+  function isSaleImproved(cached, previousCached) {
+    const current = discountValue(cached);
+    if (current <= 0) return false;
+    const previous = discountValue(previousCached);
+    if (previous <= 0) return true;
+    return current - previous >= MIN_SALE_IMPROVEMENT_POINTS;
   }
 
   // 次巻の価格を数値で返す。価格不明は Infinity（ソートで末尾に回す）。
@@ -282,6 +296,7 @@
     discountValue,
     formatRanges,
     isConfirmedHasNext,
+    isSaleImproved,
     nextUnknownProbeState,
     priceValue,
     probeSeries,

@@ -234,7 +234,7 @@
     if (card.isConfirmedHasNext(reconciled) && !card.isConfirmedHasNext(prevReconciled)) {
       nextNew = true;
     }
-    if (card.discountValue(reconciled) > 0 && card.discountValue(prevReconciled) <= 0) {
+    if (card.isSaleImproved(reconciled, prevReconciled)) {
       saleNew = true;
     }
     if (nextNew || saleNew) badgeCount += 1;
