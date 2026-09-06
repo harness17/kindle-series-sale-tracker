@@ -8,22 +8,18 @@ Copy the text block below verbatim into the submission form.
 ## Submission text (copy as-is)
 
 ```text
-Thank you for reviewing Kindle Series Sale Tracker v0.5.3.
+Thank you for reviewing Kindle Series Sale Tracker v0.5.4.
 
---- Changes in v0.5.3 ---
+--- Changes in v0.5.4 ---
 
-New:
-- Two extra sort orders in the sidebar and popup: next volume price (lowest
-  first) and follow-up last-checked date (newest first). Both reorder data
-  already stored locally; no extra requests are made.
+Improved:
+- The "NEW Sale" marker now also fires when an already-discounted follow-up
+  volume gets a deeper discount, not only when a discount first appears. The
+  rate must rise by at least 5 percentage points to avoid false positives
+  from rounding.
 
-Fixes:
-- Bulk follow-up recheck no longer overwrites a confirmed result with an
-  indeterminate one, so a temporary search hiccup cannot erase known data.
-- Bulk follow-up recheck stops after 3 consecutive indeterminate results and
-  asks the user to retry later.
-
-No new permissions. No new external network access.
+This only compares against the previously stored result. No new requests,
+permissions, external network access, or stored data.
 
 --- Purpose ---
 
@@ -79,8 +75,8 @@ Source: https://github.com/harness17/kindle-series-sale-tracker (MIT)
 
 ## Checklist before submitting
 
-- [ ] The submitted ZIP matches the source at the commit tagged `v0.5.3`
-- [ ] `manifest.json` version field reads `0.5.3`
+- [ ] The submitted ZIP matches the source at the commit tagged `v0.5.4`
+- [ ] `manifest.json` version field reads `0.5.4`
 - [ ] No `CLAUDE_CODE_HANDOFF.md` or personal data files in the ZIP (excluded by build script)
 - [ ] `data_collection_permissions.required` is `["none"]` in `browser_specific_settings`
 - [ ] Source URL in the notes matches the public GitHub repository
