@@ -75,7 +75,7 @@
         nextNew = true;
         badgeKeys[series.key] = { ...(badgeKeys[series.key] || {}), next: true };
       }
-      if (card.discountValue(reconciled) > 0 && card.discountValue(prevReconciled) <= 0) {
+      if (card.isSaleImproved(reconciled, prevReconciled)) {
         saleNew = true;
         badgeKeys[series.key] = { ...(badgeKeys[series.key] || {}), sale: true };
       }

@@ -88,6 +88,9 @@ function createHarness(
       isConfirmedHasNext() {
         return false;
       },
+      isSaleImproved() {
+        return false;
+      },
       async probeSeries(_catalog, item) {
         probeCount += 1;
         if (failingKeys.has(item.key)) throw new Error('expected probe failure');
@@ -153,6 +156,9 @@ function createOffscreenHarness(failingKeys = new Set(), unknownKeys = new Set()
           return -1;
         },
         isConfirmedHasNext() {
+          return false;
+        },
+        isSaleImproved() {
           return false;
         },
         async probeSeries(_catalog, item) {
