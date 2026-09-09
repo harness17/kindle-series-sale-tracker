@@ -1,0 +1,9 @@
+{
+  "note": "Amazon 蔵書ページの inline script を模した csrfToken 抽出の回帰用 fixture。トークンは全てダミー値で、実トークンは含めない。2026-09 に aapi 用ブロブが mycd 本体より前に出現するようになり、先頭一致で拾うと CSRF_VALIDATION_FAILED になった構成を再現する。",
+  "scriptTexts": [
+    "window.P.register('marketplace-config');\nvar config = {\"marketplace\":{\"locales\":[{\"name\":\"中文\",\"code\":\"zh-CN\"}]},\"aapi\":{\"domain\":\"data.amazon.co.jp\",\"csrfToken\":\"DUMMY-AAPI-TOKEN-0000\"}};",
+    "(function(){ /* csrfToken を含まない無関係なスクリプト */ })();",
+    "window.P.register('cf');\n            var csrfToken = \"DUMMY-MYCD-TOKEN-1111\";",
+    "P.when('A').execute(function(){\n    aapiEndpoint: \"data.amazon.co.jp\",\n    asin: \"\",\n    csrfToken: \"DUMMY-AAPI-TOKEN-0000\"\n});"
+  ]
+}

@@ -636,6 +636,45 @@
       .map((entry) => entry.item);
   }
 
+  // Amazon の蔵書ページには mycd 本体用のほかに aapi 用など複数の csrfToken が埋まっている。
+  // 単純に出現順で最初の1件を使うと、mycd の ajax が CSRF_VALIDATION_FAILED を返す
+  // （2026-09 に aapi 用ブロブが mycd 本体より前へ移動して発生）。
+  // mycd 本体は `var csrfToken = "..."` の宣言形式なので、これを JSON/オブジェクト
+  // リテラル形式より優先し、残りは後続候補として順に試せるよう配列で返す。
+  // DOM 走査は呼び出し側（content script）の責務とし、ここは純関数に保つ。
+  function pickCsrfCandidates(scriptTexts, hints) {
+    const candidates = [];
+    const push = (value) => {
+      if (typeof value !== 'string') return;
+      const token = value.trim();
+      if (!token || candidates.includes(token)) return;
+      candidates.push(token);
+    };
+
+    // Firefox は wrappedJSObject 経由で page world の値を直接読めるため最も確実。
+    // Chrome は content script が isolated world のため undefined になり、走査へ落ちる。
+    push(hints && hints.direct);
+
+    const texts = Array.isArray(scriptTexts) ? scriptTexts : [];
+    const collect = (pattern) => {
+      for (const text of texts) {
+        if (typeof text !== 'string') continue;
+        pattern.lastIndex = 0;
+        let match;
+        while ((match = pattern.exec(text))) push(match[1] || match[2]);
+      }
+    };
+
+    collect(/(?:var|let|const)\s+csrfToken\s*=\s*["']([^"']+)["']|window\.csrfToken\s*=\s*["']([^"']+)["']/g);
+    // 予備。旧実装と同じ緩いパターンで、宣言形式が消えた場合も拾えるようにする。
+    collect(/csrfToken["']?\s*[:=]\s*["']([^"']+)["']/g);
+
+    push(hints && hints.inputValue);
+    push(hints && hints.metaContent);
+
+    return candidates;
+  }
+
   return {
     STORAGE_KEY,
     PROGRESS_KEY,
@@ -651,6 +690,7 @@
     computeMissingVolumes,
     splitSeriesAndVolume,
     normalizeSeriesKey,
+    pickCsrfCandidates,
     decodeHtmlEntities,
     seriesKeyFromTitle: (title) => normalizeSeriesKey(splitSeriesAndVolume(title).seriesKey),
   };

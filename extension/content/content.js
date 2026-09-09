@@ -37,6 +37,10 @@
   // 「最初の既知1件」ではなく連続ランで判定する。
   const SIMPLE_KNOWN_RUN_STOP = 200;
   let silentAutoScan = false;
+  // Amazon のページには mycd 用以外の csrfToken も埋まっており、どれが有効かは
+  // ページ構成の変更で入れ替わる。候補を保持し、拒否されるたび次へ切り替える。
+  let csrfCandidates = [];
+  let csrfIndex = 0;
   let autoScanRunState = null;
 
   function delay(ms) {
@@ -86,25 +90,24 @@
     }, 3000);
   }
 
-  function findCsrfToken() {
-    const direct = window.csrfToken || window.wrappedJSObject?.csrfToken;
-    if (direct) return direct;
-
+  // DOM からのトークン収集はここに置き、優先順位づけは共有の純関数へ委ねる。
+  function collectCsrfCandidates() {
     const input = document.querySelector('input[name="csrfToken"], input[name="csrf-token"]');
-    if (input?.value) return input.value;
-
     const meta = document.querySelector('meta[name="csrf-token"], meta[name="csrfToken"]');
-    if (meta?.content) return meta.content;
+    return api.pickCsrfCandidates(
+      Array.from(document.scripts, (script) => script.textContent || ''),
+      {
+        // Chrome の content script は isolated world のため window.csrfToken は見えない。
+        // page world の値を直接読めるのは Firefox の wrappedJSObject 経路だけ。
+        direct: window.wrappedJSObject?.csrfToken || window.csrfToken,
+        inputValue: input?.value,
+        metaContent: meta?.content,
+      }
+    );
+  }
 
-    for (const script of document.scripts) {
-      const text = script.textContent || '';
-      const match =
-        text.match(/csrfToken["']?\s*[:=]\s*["']([^"']+)["']/) ||
-        text.match(/["']csrfToken["']\s*:\s*["']([^"']+)["']/);
-      if (match) return match[1];
-    }
-
-    return '';
+  function isCsrfRejection(errorCode) {
+    return /csrf/i.test(String(errorCode || ''));
   }
 
   async function saveProgress(value, max, status) {
@@ -179,7 +182,7 @@
     }
   }
 
-  async function fetchOwnershipPage(csrfToken, pass, startIndex) {
+  async function requestOwnershipPage(csrfToken, pass, startIndex) {
     const activityInput = JSON.stringify({
       contentType: 'Ebook',
       contentCategoryReference: 'booksAll',
@@ -216,9 +219,30 @@
       throw new Error(t('amazonErrorStatus', response.status));
     }
 
-    const json = await response.json();
+    return response.json();
+  }
+
+  async function fetchOwnershipPage(pass, startIndex) {
+    let json;
+    // トークンが拒否されたら次候補で投げ直す。進めた位置は保持するので、
+    // 以降のページ取得は余分なリクエストなしで有効なトークンを使い続ける。
+    for (;;) {
+      json = await requestOwnershipPage(csrfCandidates[csrfIndex], pass, startIndex);
+      if (json.success !== false || !isCsrfRejection(json.error)) break;
+      if (csrfIndex + 1 >= csrfCandidates.length) {
+        // 候補を全て拒否された時点でスキャン自体が続行不能。ソートパス単位の
+        // フォールバック（下の catch）に飲まれると利用者に何も伝わらないため印を付ける。
+        const fatal = new Error(t('csrfRejected'));
+        fatal.kstFatal = true;
+        throw fatal;
+      }
+      csrfIndex += 1;
+    }
+
     if (json.success === false) {
-      throw new Error(json.error || t('amazonFetchError'));
+      // Amazon の生エラーコードは利用者に出さず、調査用に console へ残す。
+      console.warn('[KST] Amazon が蔵書取得を拒否しました', json.error);
+      throw new Error(t('amazonFetchError'));
     }
 
     const data = json.GetContentOwnershipData;
@@ -235,17 +259,18 @@
     if (!chrome.runtime?.id || !chrome.storage?.local) {
       throw new Error(t('extensionUpdated'));
     }
-    const csrfToken = findCsrfToken();
-    if (!csrfToken) {
+    // スキャンのたびに現在の DOM から取り直す（滞在中にトークンが差し替わる場合に備える）。
+    csrfCandidates = collectCsrfCandidates();
+    csrfIndex = 0;
+    if (csrfCandidates.length === 0) {
       throw new Error(t('csrfNotFound'));
     }
-    return csrfToken;
   }
 
   // フルモード: 全ソート軸（取得日・タイトル・著者×昇降）で全件回収する。
   // Amazon の Ajax は1ソート順あたり約1万件で頭打ちになるため、異なる軸でマージして壁を越える。
   // 返り値は正規化済み書籍の配列（重複は ASIN で排除済み）。
-  async function collectAllBooks(csrfToken) {
+  async function collectAllBooks() {
     const byAsin = new Map();
     let reportedTotal = 0;
     let collectedAll = false;
@@ -254,7 +279,7 @@
       const pass = SORT_PASSES[passIndex];
       try {
         for (let startIndex = 0; startIndex < MAX_START_INDEX; startIndex += BATCH_SIZE) {
-          const { batch, numberOfItems } = await fetchOwnershipPage(csrfToken, pass, startIndex);
+          const { batch, numberOfItems } = await fetchOwnershipPage(pass, startIndex);
           if (Number.isFinite(numberOfItems)) {
             reportedTotal = Math.max(reportedTotal, numberOfItems);
           }
@@ -279,20 +304,21 @@
         }
       } catch (error) {
         // 追加ソート軸（TITLE/AUTHOR 等）が API に拒否されても全体を止めない。
-        // ただし1件も取得できていない＝最初の取得自体の失敗（ログイン切れ等）は致命的なので投げ直す。
-        if (byAsin.size === 0) throw error;
+        // ただし1件も取得できていない＝最初の取得自体の失敗（ログイン切れ等）と、
+        // トークン候補の枯渇は、後続パスも必ず失敗するので投げ直す。
+        if (byAsin.size === 0 || error?.kstFatal) throw error;
         console.warn('[KST] ソートパスをスキップしました', pass, error?.message || error);
       }
     }
     return Array.from(byAsin.values());
   }
 
-  async function collectLatestBooks(csrfToken, limit) {
+  async function collectLatestBooks(limit) {
     const pass = { sortOrder: 'DESCENDING', sortIndex: 'DATE' };
     const byAsin = new Map();
 
     for (let startIndex = 0; startIndex < MAX_START_INDEX; startIndex += BATCH_SIZE) {
-      const { batch } = await fetchOwnershipPage(csrfToken, pass, startIndex);
+      const { batch } = await fetchOwnershipPage(pass, startIndex);
       if (batch.length === 0) break;
 
       for (const book of batch) {
@@ -314,14 +340,14 @@
   // 新刊（最近の購入）はリストの先頭付近に集まるため、新着分だけを短時間で拾える。
   // 限界: 配信が後から確定して「古い取得日」で現れる本（ゴースト配信）や、返品・削除は
   // 降順の先頭には来ないため拾えない。これらの整合にはフルモードが要る。
-  async function collectRecentBooks(csrfToken, knownAsins) {
+  async function collectRecentBooks(knownAsins) {
     const pass = { sortOrder: 'DESCENDING', sortIndex: 'DATE' };
     const newByAsin = new Map();
     let consecutiveKnown = 0;
     let scanned = 0;
 
     for (let startIndex = 0; startIndex < MAX_START_INDEX; startIndex += BATCH_SIZE) {
-      const { batch } = await fetchOwnershipPage(csrfToken, pass, startIndex);
+      const { batch } = await fetchOwnershipPage(pass, startIndex);
       if (batch.length === 0) break;
 
       for (const book of batch) {
@@ -375,7 +401,7 @@
       const langData = await chrome.storage.local.get(i18n.LANGUAGE_KEY);
       currentLang = i18n.normalizeLanguage(langData[i18n.LANGUAGE_KEY]);
     }
-    const csrfToken = ensureContext();
+    ensureContext();
 
     let minimalBooks;
     let series;
@@ -391,14 +417,14 @@
       }
       const existingMinimal = existingItems.map((b) => api.toMinimalBook(b));
       const knownAsins = new Set(existingMinimal.map((b) => b.asin));
-      const newBooks = await collectRecentBooks(csrfToken, knownAsins);
+      const newBooks = await collectRecentBooks(knownAsins);
       const merged = api.mergeScan(existingMinimal, newBooks);
       minimalBooks = merged.minimalBooks;
       series = preserveSeriesThumbnails(merged.series, existing.series, newBooks);
       addedItems = merged.added;
       addedNote = t('addedBooks', merged.added);
     } else {
-      const normalized = await collectAllBooks(csrfToken);
+      const normalized = await collectAllBooks();
       minimalBooks = normalized.map((b) => api.toMinimalBook(b));
       series = api.summarizeNormalizedBooks(normalized);
     }
@@ -440,10 +466,10 @@
       const langData = await chrome.storage.local.get(i18n.LANGUAGE_KEY);
       currentLang = i18n.normalizeLanguage(langData[i18n.LANGUAGE_KEY]);
     }
-    const csrfToken = ensureContext();
+    ensureContext();
     const normalized = limit
-      ? await collectLatestBooks(csrfToken, limit)
-      : await collectAllBooks(csrfToken);
+      ? await collectLatestBooks(limit)
+      : await collectAllBooks();
     hideBannerSoon();
     return normalized;
   }

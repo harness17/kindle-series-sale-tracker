@@ -15,7 +15,11 @@ const {
   computeMissingVolumes,
   splitSeriesAndVolume,
   decodeHtmlEntities,
+  pickCsrfCandidates,
 } = require('./extension/shared/kindle-library.js');
+
+const csrfFixture = JSON.parse(readFileSync('fixtures/csrf-scripts.json', 'utf8'));
+const csrfScriptTexts = csrfFixture.scriptTexts;
 
 const payload = JSON.parse(readFileSync('fixtures/ownership-response.json', 'utf8'));
 const items = extractOwnershipItems(payload);
@@ -601,6 +605,46 @@ const checks = [
       const r = splitSeriesAndVolume('エリア88');
       return r.seriesKey === 'エリア88' && r.volume === null;
     })(),
+  },
+  // --- csrfToken 候補抽出の回帰テスト（CSRF_VALIDATION_FAILED 再発防止）---
+  {
+    name: 'aapi 用トークンが先に出現しても mycd の宣言形式トークンを先頭候補にする',
+    ok: (() => {
+      const c = pickCsrfCandidates(csrfScriptTexts, {});
+      return c[0] === 'DUMMY-MYCD-TOKEN-1111' && c.includes('DUMMY-AAPI-TOKEN-0000');
+    })(),
+  },
+  {
+    name: '同じトークンが複数スクリプトに出ても候補は重複しない',
+    ok: (() => {
+      const c = pickCsrfCandidates(csrfScriptTexts, {});
+      return c.length === new Set(c).size && c.length === 2;
+    })(),
+  },
+  {
+    name: 'direct ヒント（Firefox の wrappedJSObject 経路）が最優先になる',
+    ok: (() => {
+      const c = pickCsrfCandidates(csrfScriptTexts, { direct: 'DUMMY-DIRECT-TOKEN-2222' });
+      return c[0] === 'DUMMY-DIRECT-TOKEN-2222' && c[1] === 'DUMMY-MYCD-TOKEN-1111';
+    })(),
+  },
+  {
+    name: '宣言形式が無い場合は従来どおり緩いパターンで拾う（旧挙動の回帰）',
+    ok: (() => {
+      const c = pickCsrfCandidates(['var x = 1; csrfToken: "DUMMY-LOOSE-TOKEN-3333",'], {});
+      return c.length === 1 && c[0] === 'DUMMY-LOOSE-TOKEN-3333';
+    })(),
+  },
+  {
+    name: 'input / meta のヒントは script 由来候補の後ろに積む',
+    ok: (() => {
+      const c = pickCsrfCandidates(csrfScriptTexts, { inputValue: 'DUMMY-INPUT-TOKEN-4444', metaContent: '' });
+      return c[c.length - 1] === 'DUMMY-INPUT-TOKEN-4444';
+    })(),
+  },
+  {
+    name: 'どこにも csrfToken が無ければ空配列を返す',
+    ok: (() => JSON.stringify(pickCsrfCandidates(['var a = 1;'], {})) === '[]')(),
   },
 ];
 
