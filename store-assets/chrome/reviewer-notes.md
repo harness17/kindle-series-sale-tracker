@@ -17,16 +17,20 @@ This extension helps users of Amazon.co.jp's Kindle store organize their purchas
 books into series, check whether follow-up volumes exist, and see prices and
 discounts — all locally in the browser, with no external server.
 
---- Changes in v0.5.4 ---
+--- Changes in v0.5.5 ---
 
-Improvements:
-- The "NEW Sale" marker now also appears when a follow-up volume that was
-  already discounted gets a deeper discount, not only when a discount first
-  appears. To avoid false positives from rounding in Amazon's displayed
-  discount rate, the rate must rise by at least 5 percentage points.
+Bug fix (this is the reason for this release):
+- The library scan failed with Amazon's "CSRF_VALIDATION_FAILED" response and
+  could not read any book data. Amazon's library page embeds several different
+  csrfToken values for different components, and the extension picked the first
+  one found in document order, which is not the token the library endpoint
+  accepts. The extension now collects the token candidates in priority order and
+  retries with the next candidate if a request is rejected.
+- When every candidate is rejected, the user now sees a plain instruction to
+  reload the page and confirm sign-in, instead of Amazon's raw error code.
 
-This is a comparison against the previously stored result only. It adds no
-requests, no permissions, no external network access, and no change to what
+This changes only which token value is attached to the existing request. It adds
+no requests, no permissions, no external network access, and no change to what
 is stored locally.
 
 --- Network access ---
@@ -94,8 +98,8 @@ License: MIT
 
 ## Checklist before submitting
 
-- [ ] The submitted ZIP matches the source at the commit tagged `v0.5.4`
-- [ ] `manifest.json` version field reads `0.5.4`
+- [ ] The submitted ZIP matches the source at the commit tagged `v0.5.5`
+- [ ] `manifest.json` version field reads `0.5.5`
 - [ ] No `CLAUDE_CODE_HANDOFF.md` or personal data files in the ZIP (verified by build script)
 - [ ] Host permission justification text in listing-en.md is copied to the Privacy tab
 - [ ] "Remote code usage" is set to No
