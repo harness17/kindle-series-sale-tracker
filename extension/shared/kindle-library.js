@@ -464,6 +464,43 @@
     return result;
   }
 
+  // 空白境界で末尾一致する seriesKey 群を1つの統合先キーへ寄せる対応表を作る。
+  // splitSeriesAndVolume の全角スペース副題の右側優先抽出は、「…列伝　（32）」のように
+  // 巻マーカー直前にも全角スペースがあると右側が空になり全文キー
+  // （"むこうぶち 高レート裏麻雀列伝"）へ落ちる一方、「…列伝（33）」は副題キー
+  // （"高レート裏麻雀列伝"）になる。完全一致グルーピングだと同一シリーズが分裂して
+  // 所有巻が未購入扱いになる。保存済み items は title を持たず seriesKey を永続化して
+  // いるため、分割側を直しても既存データは直らない。そこで catalog-probe の sameSeries と
+  // 同じく末尾一致を同一シリーズとみなし、要約側で束ねる。
+  // 統合先は所有冊数が最多のキー（同数なら短い方）。catalog cache・完了/除外/優先フラグは
+  // group.key 単位なので、多数派キーを保って既存設定を失わないようにする。
+  // 誤統合防止: 短い側が3文字未満なら対象外（catalog-probe と同基準）。両群が同じ巻番号を
+  // 持つ場合はスピンオフ（ヤング ブラック・ジャック等）とみなして統合しない。
+  function buildSuffixKeyMergeMap(keyStats) {
+    const merged = new Map();
+    const keys = Array.from(keyStats.keys()).sort((a, b) => a.length - b.length);
+    for (const shortKey of keys) {
+      if (merged.has(shortKey) || stripTrailingWave(shortKey).length < 3) continue;
+      const family = [shortKey];
+      const volumes = new Set(keyStats.get(shortKey).volumes);
+      for (const key of keys) {
+        if (key === shortKey || merged.has(key) || !key.endsWith(` ${shortKey}`)) continue;
+        const candidateVolumes = keyStats.get(key).volumes;
+        if (candidateVolumes.some((volume) => volumes.has(volume))) continue;
+        family.push(key);
+        candidateVolumes.forEach((volume) => volumes.add(volume));
+      }
+      if (family.length < 2) continue;
+      const winner = family.reduce((best, key) => {
+        const count = keyStats.get(key).count;
+        const bestCount = keyStats.get(best).count;
+        return count > bestCount || (count === bestCount && key.length < best.length) ? key : best;
+      });
+      for (const key of family) merged.set(key, winner);
+    }
+    return merged;
+  }
+
   // 正規化済み書籍（full でも minimal でも可）をグルーピングしてシリーズ要約を作る。
   // normalizeBook を通した後の books を受け取る前提なので、title を持たない minimal 書籍
   // （簡易マージ・保存からの再構築）でも同じロジックで集計できる。
@@ -490,8 +527,22 @@
       }
     }
 
+    // 波線ゆれの統合後キーで冊数と巻番号を集計し、末尾一致キーの統合先を決める。
+    const resolveWaveKey = (item) =>
+      preferredKeys.get(stripTrailingWave(item.seriesKey)) || item.seriesKey;
+    const keyStats = new Map();
     for (const item of normalizedBooks) {
-      const seriesKey = preferredKeys.get(stripTrailingWave(item.seriesKey)) || item.seriesKey;
+      const seriesKey = resolveWaveKey(item);
+      if (!keyStats.has(seriesKey)) keyStats.set(seriesKey, { count: 0, volumes: [] });
+      const stats = keyStats.get(seriesKey);
+      stats.count += 1;
+      if (Number.isFinite(item.volume)) stats.volumes.push(item.volume);
+    }
+    const suffixMergeMap = buildSuffixKeyMergeMap(keyStats);
+
+    for (const item of normalizedBooks) {
+      const waveKey = resolveWaveKey(item);
+      const seriesKey = suffixMergeMap.get(waveKey) || waveKey;
       const book = { ...item, seriesKey };
       // 同一 ASIN を二重計上しない（取得側の重複に対する多層防御）。
       if (book.asin) {

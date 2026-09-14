@@ -7,9 +7,65 @@ const {
   isSaleImproved,
   nextUnknownProbeState,
   priceValue,
+  probeSeries,
   resolveProbeCacheWrite,
   resolvePrimaryOffer,
+  seriesSearchUrl,
 } = require('./extension/shared/series-card.js');
+const catalogProbe = require('./extension/shared/catalog-probe.js');
+
+// --- probeSeries の補完検索（ギャップ検出）回帰テスト用スタブ ---
+// fetch は URL をそのまま本文として返し、DOMParser は本文を素通しし、
+// parseSearchResultsFromDoc が URL ごとの検索結果を返す。実 HTML を使わず
+// 「どの URL を何回叩いたか」と「結果の統合」だけを検証する。
+const probeGroupKey = 'むこうぶち 高レート裏麻雀列伝';
+const probeGroup = {
+  title: probeGroupKey,
+  seriesKey: probeGroupKey,
+  author: '天獅子悦也',
+  imprint: '',
+  highestVolume: 61,
+  searchUrl: seriesSearchUrl(probeGroupKey, '天獅子悦也'),
+};
+const probeResult = (volume, spaced = false) => ({
+  asin: `A${volume}`,
+  title: `むこうぶち　高レート裏麻雀列伝${spaced ? '　' : ''}（${volume}） (近代麻雀コミックス)`,
+  url: `https://www.amazon.co.jp/dp/A${volume}`,
+  priceText: '¥700',
+});
+// 実際の Amazon 1ページ目（2026-09-14 実測）: 62 巻が含まれず 61 の次が 63 になる並び
+const probePrimaryPage = [66, 65, 64, 1, 61, 63, 3, 2, 9, 8, 10, 29, 30, 43].map((v) =>
+  probeResult(v, v < 40)
+);
+
+async function runProbe(resolver) {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  const originalDOMParser = globalThis.DOMParser;
+  globalThis.fetch = async (url) => {
+    calls.push(url);
+    if (resolver(url) === null) throw new Error('network');
+    return { ok: true, text: async () => url };
+  };
+  globalThis.DOMParser = class {
+    parseFromString(html) {
+      return html;
+    }
+  };
+  const catalog = {
+    parseSearchResultsFromDoc: (url) => resolver(url) || [],
+    detectNextVolume: catalogProbe.detectNextVolume,
+  };
+  try {
+    const result = await probeSeries(catalog, probeGroup);
+    return { result, calls };
+  } finally {
+    globalThis.fetch = originalFetch;
+    globalThis.DOMParser = originalDOMParser;
+  }
+}
+const isPageUrl = (url) => url.includes('&page=');
+const isGapUrl = (url, volume) => url === seriesSearchUrl(`${probeGroupKey} ${volume}`, '');
 
 const hasNext = {
   status: 'has-next',
@@ -228,6 +284,56 @@ const checks = [
     })(),
   },
 ];
+
+// --- probeSeries: 1ページ目に次巻が無い（+2 ギャップ）ケースの回帰テスト ---
+{
+  const smallGap = await runProbe((url) => {
+    if (url === probeGroup.searchUrl) return probePrimaryPage;
+    if (isGapUrl(url, 62)) return [probeResult(62), probeResult(66)];
+    return [];
+  });
+  checks.push({
+    name: 'probeSeries: 1ページ目が 61→63 でも補完検索で 62 巻を次巻にする',
+    ok: smallGap.result.status === 'has-next' && smallGap.result.nextVolume === 62 &&
+      smallGap.result.latestVolume === 66,
+  });
+  checks.push({
+    name: 'probeSeries: +2 ギャップでは補完検索1回だけ追加し page=2〜5 は叩かない',
+    ok: smallGap.calls.length === 2 && smallGap.calls.some((u) => isGapUrl(u, 62)) &&
+      !smallGap.calls.some(isPageUrl),
+  });
+
+  const noGap = await runProbe((url) => {
+    if (url === probeGroup.searchUrl) return probePrimaryPage.concat([probeResult(62)]);
+    return [];
+  });
+  checks.push({
+    name: 'probeSeries: 1ページ目に次巻があれば追加リクエストなし',
+    ok: noGap.result.nextVolume === 62 && noGap.calls.length === 1,
+  });
+
+  const largeGap = await runProbe((url) => {
+    if (url === probeGroup.searchUrl) return [probeResult(66), probeResult(61)];
+    if (isGapUrl(url, 62)) return [probeResult(62)];
+    if (isPageUrl(url)) return [probeResult(64)];
+    return [];
+  });
+  checks.push({
+    name: 'probeSeries: +4 以上のギャップでは従来どおり page=2〜5 と補完検索を両方叩く',
+    ok: largeGap.result.nextVolume === 62 &&
+      largeGap.calls.filter(isPageUrl).length === 4 && largeGap.calls.some((u) => isGapUrl(u, 62)),
+  });
+
+  const gapFailed = await runProbe((url) => {
+    if (url === probeGroup.searchUrl) return probePrimaryPage;
+    if (isGapUrl(url, 62)) return null;
+    return [];
+  });
+  checks.push({
+    name: 'probeSeries: 補完検索が失敗しても1ページ目の結果（63）を返す',
+    ok: gapFailed.result.status === 'has-next' && gapFailed.result.nextVolume === 63,
+  });
+}
 
 let allOk = true;
 for (const check of checks) {

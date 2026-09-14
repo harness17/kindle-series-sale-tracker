@@ -224,16 +224,23 @@
         ownedImprint: group.imprint,
       });
 
-      if (result.status === 'has-next' && result.nextVolume > group.highestVolume + 3) {
+      // Amazon の1ページ目は最新巻近辺を巻順に返さず、所持最大巻の直後の巻だけが
+      // 抜けることがある（実測: 61 所持で 66,65,64,1,61,63,… が返り 62 が無い）。
+      // 1巻でもギャップがあれば「シリーズ名 + 次巻番号」の補完検索1回で直接狙う。
+      // page=2〜5 の追加取得は中間巻の価格情報を補うためのもので、小さなギャップで
+      // 毎回叩くとバックグラウンド全件巡回のリクエスト数が膨らむため +3 超に限定する。
+      if (result.status === 'has-next' && result.nextVolume > group.highestVolume + 1) {
         try {
           const extraResults = [];
-          for (let page = 2; page <= 5; page += 1) {
-            try {
-              const pageUrl = group.searchUrl + '&page=' + page;
-              const pageResults = await fetchSearchResults(catalog, pageUrl);
-              extraResults.push(...pageResults);
-            } catch (error) {
-              // Skip failed pagination pages and keep using available results.
+          if (result.nextVolume > group.highestVolume + 3) {
+            for (let page = 2; page <= 5; page += 1) {
+              try {
+                const pageUrl = group.searchUrl + '&page=' + page;
+                const pageResults = await fetchSearchResults(catalog, pageUrl);
+                extraResults.push(...pageResults);
+              } catch (error) {
+                // Skip failed pagination pages and keep using available results.
+              }
             }
           }
 
