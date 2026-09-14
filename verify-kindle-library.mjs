@@ -606,6 +606,103 @@ const checks = [
       return r.seriesKey === 'エリア88' && r.volume === null;
     })(),
   },
+  // --- 全角スペース副題の巻ごと表記ゆれで seriesKey が分裂する回帰テスト（むこうぶち33巻）---
+  {
+    name: '巻マーカー直前の全角スペース有無で分裂したキーを1シリーズに統合する（むこうぶち）',
+    ok: (() => {
+      const series = buildSeriesSummary([
+        { title: 'むこうぶち　高レート裏麻雀列伝　（31）', authors: ['天獅子悦也'], asin: 'MK31' },
+        { title: 'むこうぶち　高レート裏麻雀列伝　（32）', authors: ['天獅子悦也'], asin: 'MK32' },
+        { title: 'むこうぶち　高レート裏麻雀列伝（33）', authors: ['天獅子悦也'], asin: 'MK33' },
+      ]);
+      return series.length === 1 &&
+        series[0].key === 'むこうぶち 高レート裏麻雀列伝' &&
+        JSON.stringify(series[0].ownedVolumes) === JSON.stringify([31, 32, 33]);
+    })(),
+  },
+  {
+    name: 'title を持たない保存済み minimal 書籍（旧キーのまま）でも再要約で統合される',
+    ok: (() => {
+      const series = summarizeNormalizedBooks([
+        { asin: 'MK31', seriesKey: 'むこうぶち 高レート裏麻雀列伝', volume: 31, imprint: '', author: '天獅子悦也' },
+        { asin: 'MK32', seriesKey: 'むこうぶち 高レート裏麻雀列伝', volume: 32, imprint: '', author: '天獅子悦也' },
+        { asin: 'MK33', seriesKey: '高レート裏麻雀列伝', volume: 33, imprint: '', author: '天獅子悦也' },
+      ]);
+      return series.length === 1 && series[0].key === 'むこうぶち 高レート裏麻雀列伝' &&
+        series[0].highestVolume === 33 && series[0].nextVolume === 34;
+    })(),
+  },
+  {
+    name: '統合先は所有冊数が最多のキー（cache・完了フラグは key 単位なので多数派を保つ）',
+    ok: (() => {
+      const series = buildSeriesSummary([
+        { title: 'むこうぶち　高レート裏麻雀列伝（33）', authors: ['天獅子悦也'], asin: 'MK33' },
+        { title: 'むこうぶち　高レート裏麻雀列伝（34）', authors: ['天獅子悦也'], asin: 'MK34' },
+        { title: 'むこうぶち　高レート裏麻雀列伝　（32）', authors: ['天獅子悦也'], asin: 'MK32' },
+      ]);
+      return series.length === 1 && series[0].key === '高レート裏麻雀列伝' &&
+        JSON.stringify(series[0].ownedVolumes) === JSON.stringify([32, 33, 34]);
+    })(),
+  },
+  {
+    name: '所有冊数が同数なら短い方のキーへ寄せる（副題付きの巻と無印の巻）',
+    ok: (() => {
+      const series = buildSeriesSummary([
+        { title: '宇宙兵志願 (ハヤカワ文庫SF)', authors: ['著者A'], asin: 'SH1' },
+        { title: '強行偵察　宇宙兵志願　（2）', authors: ['著者A'], asin: 'SH2' },
+      ]);
+      return series.length === 1 && series[0].key === '宇宙兵志願' &&
+        JSON.stringify(series[0].ownedVolumes) === JSON.stringify([1, 2]);
+    })(),
+  },
+  {
+    name: '前方一致のスピンオフは統合しない（小林さんちのメイドラゴン エルマのOL日記）',
+    ok: (() => {
+      const series = buildSeriesSummary([
+        { title: '小林さんちのメイドラゴン 1', authors: ['著者A'], asin: 'KM1' },
+        { title: '小林さんちのメイドラゴン 2', authors: ['著者A'], asin: 'KM2' },
+        { title: '小林さんちのメイドラゴン エルマのOL日記 3', authors: ['著者A'], asin: 'KE3' },
+        { title: '小林さんちのメイドラゴン エルマのOL日記 4', authors: ['著者A'], asin: 'KE4' },
+      ]);
+      return series.length === 2;
+    })(),
+  },
+  {
+    name: '空白境界でない末尾一致は統合しない（真ハイスクールD×D）',
+    ok: (() => {
+      const series = buildSeriesSummary([
+        { title: 'ハイスクールD×D 1', authors: ['著者A'], asin: 'HS1' },
+        { title: 'ハイスクールD×D 2', authors: ['著者A'], asin: 'HS2' },
+        { title: '真ハイスクールD×D 3', authors: ['著者A'], asin: 'SH3' },
+        { title: '真ハイスクールD×D 4', authors: ['著者A'], asin: 'SH4' },
+      ]);
+      return series.length === 2;
+    })(),
+  },
+  {
+    name: '同じ巻番号を両方が持つ末尾一致キーは別作品として統合しない（ヤング ブラック・ジャック）',
+    ok: (() => {
+      const series = buildSeriesSummary([
+        { title: 'ブラック・ジャック 1', authors: ['手塚治虫'], asin: 'BJ1' },
+        { title: 'ブラック・ジャック 2', authors: ['手塚治虫'], asin: 'BJ2' },
+        { title: 'ヤング ブラック・ジャック 1', authors: ['田畑由秋'], asin: 'YB1' },
+        { title: 'ヤング ブラック・ジャック 2', authors: ['田畑由秋'], asin: 'YB2' },
+      ]);
+      return series.length === 2;
+    })(),
+  },
+  {
+    name: '短い側が3文字未満の末尾一致は統合しない',
+    ok: (() => {
+      const series = buildSeriesSummary([
+        { title: '刃 1', authors: ['著者A'], asin: 'HA1' },
+        { title: '刃 2', authors: ['著者A'], asin: 'HA2' },
+        { title: '鬼滅の 刃 1', authors: ['著者A'], asin: 'KY1' },
+        { title: '鬼滅の 刃 3', authors: ['著者A'], asin: 'KY3' },
+      ]);
+      return series.length === 2;
+    })(),
+  },
   // --- csrfToken 候補抽出の回帰テスト（CSRF_VALIDATION_FAILED 再発防止）---
   {
     name: 'aapi 用トークンが先に出現しても mycd の宣言形式トークンを先頭候補にする',
