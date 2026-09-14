@@ -17,21 +17,23 @@ This extension helps users of Amazon.co.jp's Kindle store organize their purchas
 books into series, check whether follow-up volumes exist, and see prices and
 discounts — all locally in the browser, with no external server.
 
---- Changes in v0.5.5 ---
+--- Changes in v0.5.6 ---
 
-Bug fix (this is the reason for this release):
-- The library scan failed with Amazon's "CSRF_VALIDATION_FAILED" response and
-  could not read any book data. Amazon's library page embeds several different
-  csrfToken values for different components, and the extension picked the first
-  one found in document order, which is not the token the library endpoint
-  accepts. The extension now collects the token candidates in priority order and
-  retries with the next candidate if a request is rejected.
-- When every candidate is rejected, the user now sees a plain instruction to
-  reload the page and confirm sign-in, instead of Amazon's raw error code.
+Two bug fixes (the reason for this release):
+- Series grouping: when Amazon's book titles place a full-width space in a
+  different position from volume to volume (e.g. "Title  (32)" vs "Title(33)"),
+  the extension derived two different series keys and showed an owned volume as
+  not owned. Series whose keys differ only by a subtitle prefix are now merged
+  into one group, unless they share a volume number (spin-off protection).
+- Follow-up volume check: when the first search result page did not include the
+  volume right after the highest owned one, the next-higher volume was shown as
+  the follow-up (e.g. 63 instead of 62). The existing supplemental search for
+  "<series> <next volume>" now also runs for small gaps (previously only for
+  gaps of four or more volumes).
 
-This changes only which token value is attached to the existing request. It adds
-no requests, no permissions, no external network access, and no change to what
-is stored locally.
+The supplemental search uses the same Amazon.co.jp search URL pattern as before
+and is triggered by the same user action or opt-in schedule. No new permissions,
+no new domains, no change to what is stored locally.
 
 --- Network access ---
 
@@ -98,8 +100,8 @@ License: MIT
 
 ## Checklist before submitting
 
-- [ ] The submitted ZIP matches the source at the commit tagged `v0.5.5`
-- [ ] `manifest.json` version field reads `0.5.5`
+- [ ] The submitted ZIP matches the source at the commit tagged `v0.5.6`
+- [ ] `manifest.json` version field reads `0.5.6`
 - [ ] No `CLAUDE_CODE_HANDOFF.md` or personal data files in the ZIP (verified by build script)
 - [ ] Host permission justification text in listing-en.md is copied to the Privacy tab
 - [ ] "Remote code usage" is set to No
