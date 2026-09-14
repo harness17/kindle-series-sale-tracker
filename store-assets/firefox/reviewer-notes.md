@@ -8,21 +8,21 @@ Copy the text block below verbatim into the submission form.
 ## Submission text (copy as-is)
 
 ```text
-Thank you for reviewing Kindle Series Sale Tracker v0.5.5.
+Thank you for reviewing Kindle Series Sale Tracker v0.5.6.
 
---- Changes in v0.5.5 ---
+--- Changes in v0.5.6 ---
 
-Bug fix (the reason for this release):
-- The library scan failed with Amazon's "CSRF_VALIDATION_FAILED" response and
-  read no book data. Amazon's library page embeds several csrfToken values for
-  different components, and the extension used the first one in document order,
-  which the library endpoint does not accept. It now collects the candidates in
-  priority order and retries with the next one when a request is rejected.
-- If every candidate is rejected, the user sees a plain instruction to reload
-  the page and check sign-in, not Amazon's raw error code.
+Two bug fixes (the reason for this release):
+- Series grouping: when Amazon titles place a full-width space differently from
+  volume to volume ("Title  (32)" vs "Title(33)"), two series keys were derived
+  and an owned volume was shown as not owned. Keys that differ only by a
+  subtitle prefix are now merged, unless they share a volume number (spin-offs).
+- Follow-up check: when the first search page lacked the volume right after the
+  highest owned one, a later volume was shown (63 instead of 62). The existing
+  "<series> <next volume>" supplemental search now also runs for small gaps.
 
-This only changes which token value is attached to the existing request. No new
-requests, permissions, external network access, or stored data.
+Same Amazon.co.jp search URL pattern and triggers as before. No new permissions,
+domains, or stored data.
 
 --- Purpose ---
 
@@ -78,8 +78,8 @@ Source: https://github.com/harness17/kindle-series-sale-tracker (MIT)
 
 ## Checklist before submitting
 
-- [ ] The submitted ZIP matches the source at the commit tagged `v0.5.5`
-- [ ] `manifest.json` version field reads `0.5.5`
+- [ ] The submitted ZIP matches the source at the commit tagged `v0.5.6`
+- [ ] `manifest.json` version field reads `0.5.6`
 - [ ] No `CLAUDE_CODE_HANDOFF.md` or personal data files in the ZIP (excluded by build script)
 - [ ] `data_collection_permissions.required` is `["none"]` in `browser_specific_settings`
 - [ ] Source URL in the notes matches the public GitHub repository
