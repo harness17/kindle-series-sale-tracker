@@ -586,6 +586,28 @@ const checks = [
     })(),
   },
   {
+    name: '全角英字の単語区切り（ＳＨＡＭＡＮ　ＫＩＮＧ）は副題区切りとして切らない',
+    ok: (() => {
+      const cases = [
+        ['ＳＨＡＭＡＮ　ＫＩＮＧ 1 (ジャンプコミックスDIGITAL)', 1, 'ジャンプコミックスDIGITAL'],
+        ['ＳＨＡＭＡＮ　ＫＩＮＧ（1）', 1, ''],
+        ['ＳＨＡＭＡＮ　ＫＩＮＧ 12', 12, ''],
+        ['ＳＨＡＭＡＮ　ＫＩＮＧ　１ (ジャンプコミックスDIGITAL)', 1, 'ジャンプコミックスDIGITAL'],
+      ];
+      return cases.every(([title, volume, imprint]) => {
+        const r = splitSeriesAndVolume(title);
+        return r.seriesKey === 'SHAMAN KING' && r.volume === volume && r.imprint === imprint;
+      });
+    })(),
+  },
+  {
+    name: '単語区切りの全角スペースより手前の副題区切りを採用する',
+    ok: (() => {
+      const r = splitSeriesAndVolume('強行偵察　ＳＨＡＭＡＮ　ＫＩＮＧ 2');
+      return r.seriesKey === 'SHAMAN KING' && r.volume === 2;
+    })(),
+  },
+  {
     name: '全角スペースがなければ従来通りフルタイトルから巻数を取る',
     ok: (() => {
       const r = splitSeriesAndVolume('鬼滅の刃 1');

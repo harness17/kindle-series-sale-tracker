@@ -176,6 +176,19 @@
     return '';
   }
 
+  // 副題区切りとして扱う全角スペース（U+3000）の位置を右から探す。
+  // 両隣が英数字（半角・全角）なら単語区切りとみなして読み飛ばす。見つからなければ -1。
+  const ALNUM_NEIGHBOR = /[0-9A-Za-z０-９Ａ-Ｚａ-ｚ]/;
+  function findSubtitleSpaceIndex(rawStr) {
+    let idx = rawStr.lastIndexOf('　');
+    while (idx > 0) {
+      const isWordSpace = ALNUM_NEIGHBOR.test(rawStr[idx - 1]) && ALNUM_NEIGHBOR.test(rawStr[idx + 1] || '');
+      if (!isWordSpace) return idx;
+      idx = rawStr.lastIndexOf('　', idx - 1);
+    }
+    return -1;
+  }
+
   // タイトルを「シリーズ名」と「巻数」に分割する。
   // 末尾付近の巻トークン位置でタイトルを切り、それ以降（巻ごとに変わる
   // サブタイトルや版表記）は捨てることで、表記ゆれを跨いで同一シリーズへ束ねる。
@@ -190,8 +203,11 @@
 
     // 全角スペース（U+3000）を副題区切りとみなし、右側からシリーズ名+巻数を優先抽出する。
     // 例: "強行偵察　宇宙兵志願 ２ (ハヤカワ文庫SF)" → 右 "宇宙兵志願 ２ …" → "宇宙兵志願"
+    // ただし両隣が英数字の全角スペース（"ＳＨＡＭＡＮ　ＫＩＮＧ"）は全角英字タイトルの
+    // 単語区切りなので副題区切りにしない。lastIndexOf 1点だと単語区切りで打ち切られて
+    // 手前の副題区切りを見逃すため、右から走査して単語区切りでない最初の位置を使う。
     const rawStr = String(rawTitle || '');
-    const ideoSpaceIdx = rawStr.lastIndexOf('　');
+    const ideoSpaceIdx = findSubtitleSpaceIndex(rawStr);
     if (ideoSpaceIdx > 0) {
       const rightResult = splitSeriesAndVolume(rawStr.slice(ideoSpaceIdx + 1));
       if (rightResult.volume !== null && rightResult.seriesKey.length >= 2) {
