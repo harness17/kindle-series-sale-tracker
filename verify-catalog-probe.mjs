@@ -6,9 +6,10 @@ const {
   detectNextVolume,
   extractSearchResultOffer,
   normalizePublicationDate,
+  sameSeries,
 } = require('./extension/shared/catalog-probe.js');
 const { reconcileCatalog, isConfirmedHasNext } = require('./extension/shared/series-card.js');
-const { mergeScan, summarizeNormalizedBooks } = require('./extension/shared/kindle-library.js');
+const { mergeScan, splitSeriesAndVolume, summarizeNormalizedBooks } = require('./extension/shared/kindle-library.js');
 
 const checks = [
   {
@@ -873,6 +874,45 @@ const checks = [
       const cached = { status: 'has-next', nextVolume: 7, latestVolume: 10 };
       const r = reconcileCatalog(cached, after.highestVolume);
       return after.highestVolume === 7 && r.stale === true && r.status === 'has-next';
+    })(),
+  },
+  // --- 全角スペース副題のシリーズ名欠落（追放されたチート付与魔術師）の回帰テスト ---
+  {
+    name: '波ダッシュ・全角疑問符の表記ゆれがあっても同一シリーズとみなす',
+    ok:
+      sameSeries(
+        '追放されたチート付与魔術師は気ままなセカンドライフを謳歌する。 ~俺は大丈夫?~',
+        '追放されたチート付与魔術師は気ままなセカンドライフを謳歌する。 ～俺は大丈夫？～'
+      ) &&
+      // 表記を寄せても別シリーズは混ざらない。
+      !sameSeries('ぼくの大丈夫?', 'きみの大丈夫？'),
+  },
+  {
+    name: '実検索結果のタイトル形（商品名＋シリーズ名＋レーベル連結）から続刊を検出する',
+    ok: (() => {
+      // Amazon 検索結果の h2 は「商品名（巻）＋シリーズ名＋...＋レーベル」が連結される。
+      const head =
+        '追放されたチート付与魔術師は気ままなセカンドライフを謳歌する。　～俺は武器だけじゃなく、あらゆるものに『強化ポイント』を付与できるし、俺の意思でいつでも効果を解除できるけど、残った人たち大丈夫？～';
+      const tail =
+        '追放されたチート付与魔術師は気ままなセカンドライフを謳歌する。 ~俺は武器だけじゃなく、あらゆるものに『強化ポイント』を付与できるし、俺の意思でいつでも効果を解除できるけど、残った人たち大丈夫?~';
+      const results = [22, 21, 3, 2, 1].map((v) => ({
+        title:
+          v === 22
+            ? `${head}（${v}） (月刊少年マガジンコミックス)`
+            : `${head}（${v}） ${tail} ... (月刊少年マガジンコミックス)`,
+        url: `u${v}`,
+      }));
+      // ライブラリ側の表記が全角・半角どちらでも 22 巻を続刊として拾えること。
+      return [head, tail].every((ownedTitle) => {
+        const owned = splitSeriesAndVolume(`${ownedTitle}（２１） (月刊少年マガジンコミックス)`);
+        const r = detectNextVolume(results, {
+          seriesTitle: owned.seriesKey,
+          seriesKey: owned.seriesKey,
+          highestVolume: 21,
+          ownedImprint: owned.imprint,
+        });
+        return owned.volume === 21 && r.status === 'has-next' && r.nextVolume === 22 && r.nextUrl === 'u22';
+      });
     })(),
   },
 ];
