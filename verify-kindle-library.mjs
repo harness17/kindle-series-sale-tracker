@@ -568,10 +568,10 @@ const checks = [
     })(),
   },
   {
-    name: '全角スペースを副題区切りとして右側からシリーズ名を取る（宇宙兵志願）',
+    name: '全角スペースで右側を優先せずフルタイトルをシリーズ名にする（強行偵察　宇宙兵志願）',
     ok: (() => {
       const r = splitSeriesAndVolume('強行偵察　宇宙兵志願 ２ (ハヤカワ文庫SF)');
-      return r.seriesKey === '宇宙兵志願' && r.volume === 2 && r.imprint === 'ハヤカワ文庫SF';
+      return r.seriesKey === '強行偵察 宇宙兵志願' && r.volume === 2 && r.imprint === 'ハヤカワ文庫SF';
     })(),
   },
   {
@@ -583,6 +583,78 @@ const checks = [
       ]);
       return series.length === 1 && series[0].key === '宇宙兵志願' &&
         JSON.stringify(series[0].ownedVolumes) === JSON.stringify([1, 2]);
+    })(),
+  },
+  {
+    name: '全角英字の単語区切り（ＳＨＡＭＡＮ　ＫＩＮＧ）は副題区切りとして切らない',
+    ok: (() => {
+      const cases = [
+        ['ＳＨＡＭＡＮ　ＫＩＮＧ 1 (ジャンプコミックスDIGITAL)', 1, 'ジャンプコミックスDIGITAL'],
+        ['ＳＨＡＭＡＮ　ＫＩＮＧ（1）', 1, ''],
+        ['ＳＨＡＭＡＮ　ＫＩＮＧ 12', 12, ''],
+        ['ＳＨＡＭＡＮ　ＫＩＮＧ　１ (ジャンプコミックスDIGITAL)', 1, 'ジャンプコミックスDIGITAL'],
+      ];
+      return cases.every(([title, volume, imprint]) => {
+        const r = splitSeriesAndVolume(title);
+        return r.seriesKey === 'SHAMAN KING' && r.volume === volume && r.imprint === imprint;
+      });
+    })(),
+  },
+  {
+    name: '全角スペースが複数あってもフルタイトルをシリーズ名にする（強行偵察　ＳＨＡＭＡＮ　ＫＩＮＧ）',
+    ok: (() => {
+      const r = splitSeriesAndVolume('強行偵察　ＳＨＡＭＡＮ　ＫＩＮＧ 2');
+      return r.seriesKey === '強行偵察 SHAMAN KING' && r.volume === 2;
+    })(),
+  },
+  // --- 全角スペースを副題区切りにしたことでシリーズ名が欠けていた回帰テスト ---
+  {
+    name: '全角スペース副題付きの長いタイトルでシリーズ名を落とさない（追放されたチート付与魔術師）',
+    ok: (() => {
+      const r = splitSeriesAndVolume(
+        '追放されたチート付与魔術師は気ままなセカンドライフを謳歌する。　～俺は武器だけじゃなく、あらゆるものに『強化ポイント』を付与できるし、俺の意思でいつでも効果を解除できるけど、残った人たち大丈夫？～（１） (月刊少年マガジンコミックス)'
+      );
+      return r.seriesKey ===
+        '追放されたチート付与魔術師は気ままなセカンドライフを謳歌する。 ～俺は武器だけじゃなく、あらゆるものに『強化ポイント』を付与できるし、俺の意思でいつでも効果を解除できるけど、残った人たち大丈夫？～' &&
+        r.volume === 1 && r.imprint === '月刊少年マガジンコミックス';
+    })(),
+  },
+  {
+    name: '全角スペース副題の作品名を落とさず1シリーズにまとめる（機動戦士ガンダムF91）',
+    ok: (() => {
+      const series = buildSeriesSummary([
+        { title: '機動戦士ガンダムF91　エターナルウインド(１) (角川コミックス・エース)', authors: ['著者A'], asin: 'F911' },
+        { title: '機動戦士ガンダムF91　エターナルウインド(２) (角川コミックス・エース)', authors: ['著者A'], asin: 'F912' },
+      ]);
+      return series.length === 1 &&
+        series[0].key === '機動戦士ガンダムF91 エターナルウインド' &&
+        series[0].imprint === '角川コミックス・エース' &&
+        JSON.stringify(series[0].ownedVolumes) === JSON.stringify([1, 2]);
+    })(),
+  },
+  {
+    name: '前置副題が巻ごとに違っても無印の巻があれば従来どおり統合される（強行偵察　宇宙兵志願）',
+    ok: (() => {
+      const series = buildSeriesSummary([
+        { title: '宇宙兵志願 (ハヤカワ文庫SF)', authors: ['著者A'], asin: 'SH1' },
+        { title: '強行偵察　宇宙兵志願 ２ (ハヤカワ文庫SF)', authors: ['著者A'], asin: 'SH2' },
+        { title: '最後の星戦　宇宙兵志願 ３ (ハヤカワ文庫SF)', authors: ['著者A'], asin: 'SH3' },
+      ]);
+      return series.length === 1 && series[0].key === '宇宙兵志願' &&
+        JSON.stringify(series[0].ownedVolumes) === JSON.stringify([1, 2, 3]);
+    })(),
+  },
+  {
+    name: '巻番号が重ならない旧キー（副題のみ）と新キー（フルタイトル）は末尾一致で統合される',
+    ok: (() => {
+      const series = summarizeNormalizedBooks([
+        { asin: 'F911', seriesKey: 'エターナルウインド', volume: 1, imprint: '角川コミックス・エース', author: '著者A' },
+        { asin: 'F912', seriesKey: 'エターナルウインド', volume: 2, imprint: '角川コミックス・エース', author: '著者A' },
+        { asin: 'F913', seriesKey: '機動戦士ガンダムF91 エターナルウインド', volume: 3, imprint: '角川コミックス・エース', author: '著者A' },
+      ]);
+      // 統合先は所有冊数が最多の旧キー。カード名を新しいフルタイトルへ直すには全件スキャンが要る。
+      return series.length === 1 && series[0].key === 'エターナルウインド' &&
+        JSON.stringify(series[0].ownedVolumes) === JSON.stringify([1, 2, 3]);
     })(),
   },
   {
@@ -635,10 +707,11 @@ const checks = [
   {
     name: '統合先は所有冊数が最多のキー（cache・完了フラグは key 単位なので多数派を保つ）',
     ok: (() => {
-      const series = buildSeriesSummary([
-        { title: 'むこうぶち　高レート裏麻雀列伝（33）', authors: ['天獅子悦也'], asin: 'MK33' },
-        { title: 'むこうぶち　高レート裏麻雀列伝（34）', authors: ['天獅子悦也'], asin: 'MK34' },
-        { title: 'むこうぶち　高レート裏麻雀列伝　（32）', authors: ['天獅子悦也'], asin: 'MK32' },
+      // 保存済みキーの分裂を直接与える（splitSeriesAndVolume は全角スペースで切らないため）。
+      const series = summarizeNormalizedBooks([
+        { asin: 'MK33', seriesKey: '高レート裏麻雀列伝', volume: 33, imprint: '', author: '天獅子悦也' },
+        { asin: 'MK34', seriesKey: '高レート裏麻雀列伝', volume: 34, imprint: '', author: '天獅子悦也' },
+        { asin: 'MK32', seriesKey: 'むこうぶち 高レート裏麻雀列伝', volume: 32, imprint: '', author: '天獅子悦也' },
       ]);
       return series.length === 1 && series[0].key === '高レート裏麻雀列伝' &&
         JSON.stringify(series[0].ownedVolumes) === JSON.stringify([32, 33, 34]);

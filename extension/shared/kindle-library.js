@@ -188,16 +188,12 @@
       return { seriesKey: stripBoxSetNoise(title), volume: null, imprint: '' };
     }
 
-    // 全角スペース（U+3000）を副題区切りとみなし、右側からシリーズ名+巻数を優先抽出する。
-    // 例: "強行偵察　宇宙兵志願 ２ (ハヤカワ文庫SF)" → 右 "宇宙兵志願 ２ …" → "宇宙兵志願"
-    const rawStr = String(rawTitle || '');
-    const ideoSpaceIdx = rawStr.lastIndexOf('　');
-    if (ideoSpaceIdx > 0) {
-      const rightResult = splitSeriesAndVolume(rawStr.slice(ideoSpaceIdx + 1));
-      if (rightResult.volume !== null && rightResult.seriesKey.length >= 2) {
-        return rightResult;
-      }
-    }
+    // 全角スペース（U+3000）は副題区切りとして特別扱いしない。日本語タイトルでは
+    // 「本題　副題」（左がシリーズ名）が多数派で、右側を採ると
+    // 「機動戦士ガンダムF91　エターナルウインド」→「エターナルウインド」のように
+    // シリーズ名が欠ける。逆順の「強行偵察　宇宙兵志願」型は1タイトル単体では
+    // 区別できないため、要約側の buildSuffixKeyMergeMap（空白境界の末尾一致統合）と
+    // catalog-probe の sameSeries（末尾一致）で吸収する。
 
     let marker = null; // { headLen, volume, tokenEnd }
 
@@ -272,8 +268,6 @@
           .map(normalizeText)
           .filter(Boolean);
 
-    // splitSeriesAndVolume は内部で normalizeText するため、原タイトルを渡す。
-    // 正規化後を渡すと全角スペース（副題区切り）の情報が消える。
     const { seriesKey, volume, imprint } = splitSeriesAndVolume(item.title);
 
     return {
@@ -465,13 +459,11 @@
   }
 
   // 空白境界で末尾一致する seriesKey 群を1つの統合先キーへ寄せる対応表を作る。
-  // splitSeriesAndVolume の全角スペース副題の右側優先抽出は、「…列伝　（32）」のように
-  // 巻マーカー直前にも全角スペースがあると右側が空になり全文キー
-  // （"むこうぶち 高レート裏麻雀列伝"）へ落ちる一方、「…列伝（33）」は副題キー
-  // （"高レート裏麻雀列伝"）になる。完全一致グルーピングだと同一シリーズが分裂して
-  // 所有巻が未購入扱いになる。保存済み items は title を持たず seriesKey を永続化して
-  // いるため、分割側を直しても既存データは直らない。そこで catalog-probe の sameSeries と
-  // 同じく末尾一致を同一シリーズとみなし、要約側で束ねる。
+  // 巻ごとに前置副題の有無が変わる作品（"宇宙兵志願" と "強行偵察　宇宙兵志願 ２"）は
+  // splitSeriesAndVolume がタイトル単体では同じキーに畳めず、完全一致グルーピングだと
+  // 同一シリーズが分裂して所有巻が未購入扱いになる。また保存済み items は title を持たず
+  // seriesKey を永続化しているため、分割側の仕様を変えても既存データは直らない。そこで
+  // catalog-probe の sameSeries と同じく末尾一致を同一シリーズとみなし、要約側で束ねる。
   // 統合先は所有冊数が最多のキー（同数なら短い方）。catalog cache・完了/除外/優先フラグは
   // group.key 単位なので、多数派キーを保って既存設定を失わないようにする。
   // 誤統合防止: 短い側が3文字未満なら対象外（catalog-probe と同基準）。両群が同じ巻番号を

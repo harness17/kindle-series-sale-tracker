@@ -12,12 +12,20 @@
   // 同一シリーズ判定は正規化 seriesKey の完全一致のみ。
   // 部分一致にすると「小林さんちのメイドラゴン」が「…エルマのＯＬ日記」等の
   // スピンオフを同一シリーズと誤判定して続刊照合がごっちゃになるため避ける。
-  // 全角スペース分割で副題部分のみになった候補と、半角スペース連結のフルタイトルを照合するため、
+  // 前置副題が巻ごとに変わる作品（"宇宙兵志願" と "強行偵察　宇宙兵志願"）を照合するため、
   // 完全一致に加えて末尾一致も許容する（短い側が3文字以上の場合のみ）。
+  // 波ダッシュと全角疑問符は同じ検索結果ページ内でも全角・半角が混在する
+  // （商品名は "…大丈夫？～"、シリーズ名行は "…大丈夫?~"）。所有側とカタログ側で
+  // 表記が割れると一致しないため、比較用キーでは半角へ寄せる（保存キーは変えない）。
   function sameSeries(a, b) {
     if (!a || !b) return false;
     const normalizeKey = (value) =>
-      kdl.normalizeSeriesKey(value).replace(/\s+/g, '').replace(/[-‐－―—~～]+$/g, '');
+      kdl
+        .normalizeSeriesKey(value)
+        .replace(/[～〜]/g, '~')
+        .replace(/？/g, '?')
+        .replace(/\s+/g, '')
+        .replace(/[-‐－―—~～]+$/g, '');
     const na = normalizeKey(a);
     const nb = normalizeKey(b);
     if (na === '' || nb === '') return false;
