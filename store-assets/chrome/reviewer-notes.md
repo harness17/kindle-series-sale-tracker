@@ -17,23 +17,23 @@ This extension helps users of Amazon.co.jp's Kindle store organize their purchas
 books into series, check whether follow-up volumes exist, and see prices and
 discounts — all locally in the browser, with no external server.
 
---- Changes in v0.5.6 ---
+--- Changes in v0.5.7 ---
 
-Two bug fixes (the reason for this release):
-- Series grouping: when Amazon's book titles place a full-width space in a
-  different position from volume to volume (e.g. "Title  (32)" vs "Title(33)"),
-  the extension derived two different series keys and showed an owned volume as
-  not owned. Series whose keys differ only by a subtitle prefix are now merged
-  into one group, unless they share a volume number (spin-off protection).
-- Follow-up volume check: when the first search result page did not include the
-  volume right after the highest owned one, the next-higher volume was shown as
-  the follow-up (e.g. 63 instead of 62). The existing supplemental search for
-  "<series> <next volume>" now also runs for small gaps (previously only for
-  gaps of four or more volumes).
+One bug fix (the reason for this release):
+- Series grouping: a full-width space inside an Amazon book title was treated as
+  a subtitle separator, so only the text after it became the series name. For
+  titles written as "<Series>  <Subtitle> (2)" the series name was dropped, the
+  card showed the subtitle on its own, and the follow-up search found no match.
+  The full title is now kept as the series key; titles that differ only by a
+  subtitle prefix are still merged into one group when the library is grouped.
+  Follow-up matching also treats full-width and half-width wave dashes and
+  question marks as the same character, because Amazon mixes both forms on the
+  same search page. Series keys stored by earlier versions are refreshed when
+  the user runs a full library scan.
 
-The supplemental search uses the same Amazon.co.jp search URL pattern as before
-and is triggered by the same user action or opt-in schedule. No new permissions,
-no new domains, no change to what is stored locally.
+Searches use the same Amazon.co.jp search URL pattern as before and are
+triggered by the same user action or opt-in schedule. No new permissions, no new
+domains, no change to what is stored locally.
 
 --- Network access ---
 
@@ -100,8 +100,8 @@ License: MIT
 
 ## Checklist before submitting
 
-- [ ] The submitted ZIP matches the source at the commit tagged `v0.5.6`
-- [ ] `manifest.json` version field reads `0.5.6`
+- [ ] The submitted ZIP matches the source at the commit tagged `v0.5.7`
+- [ ] `manifest.json` version field reads `0.5.7`
 - [ ] No `CLAUDE_CODE_HANDOFF.md` or personal data files in the ZIP (verified by build script)
 - [ ] Host permission justification text in listing-en.md is copied to the Privacy tab
 - [ ] "Remote code usage" is set to No
