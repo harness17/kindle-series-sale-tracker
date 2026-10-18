@@ -8,7 +8,7 @@
 - [ ] Upload screenshots:
   - `store-assets/firefox/screenshots/01-options-list-1280x800.png`
   - `store-assets/firefox/screenshots/02-side-panel-1280x800.png`
-- [ ] Paste Summary, Description, and Version Notes from `listing-ja.md`.
+- [ ] Paste Summary, Description, and Version Notes (0.5.7) from `listing-ja.md`.
 - [ ] Paste the current AMO reviewer text from `reviewer-notes.md`.
 - [ ] Set category to `Shopping`.
 - [ ] Set language to `Japanese`.

@@ -59,12 +59,24 @@ This extension depends on Amazon.co.jp page structure. Changes on Amazon's side 
 This extension is designed for Amazon.co.jp (Japanese Kindle store) only.
 ```
 
-## Version Notes (0.4.4)
+## Version Notes (0.5.7)
 
 ```text
-Version 0.4.4
+Version 0.5.7
 
-New in this version:
+Bug fix:
+- A full-width space in a book title was treated as a subtitle separator, so for
+  titles written as "Series  Subtitle (2)" the series name was dropped, the card
+  showed the subtitle alone, and no follow-up volume was found
+
+After updating:
+- Run "Scan Library" once to apply the fix; until then cards keep their old names
+- Series whose titles have a full-width space before the volume number get a new
+  internal name, so the "completed", "excluded" and "priority" settings and the
+  cached results for those series are not carried over
+- No new permissions
+
+Previous (0.4.4):
 - Each scheduled background cycle checks every eligible series while retaining throttled batches
 - Background status now shows running/completed/failed state, processed count, and failures
 - Auto-scan status now shows trigger decisions, not-due/no-baseline skips, progress, completion, and failure
