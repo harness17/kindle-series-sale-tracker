@@ -8,18 +8,20 @@ Copy the text block below verbatim into the submission form.
 ## Submission text (copy as-is)
 
 ```text
-Thank you for reviewing Kindle Series Sale Tracker v0.5.6.
+Thank you for reviewing Kindle Series Sale Tracker v0.5.7.
 
---- Changes in v0.5.6 ---
+--- Changes in v0.5.7 ---
 
-Two bug fixes (the reason for this release):
-- Series grouping: when Amazon titles place a full-width space differently from
-  volume to volume ("Title  (32)" vs "Title(33)"), two series keys were derived
-  and an owned volume was shown as not owned. Keys that differ only by a
-  subtitle prefix are now merged, unless they share a volume number (spin-offs).
-- Follow-up check: when the first search page lacked the volume right after the
-  highest owned one, a later volume was shown (63 instead of 62). The existing
-  "<series> <next volume>" supplemental search now also runs for small gaps.
+One bug fix (the reason for this release):
+- Series grouping: a full-width space in an Amazon title was treated as a
+  subtitle separator, so only the text after it became the series name. For
+  titles written as "<Series>  <Subtitle> (2)" the series name was dropped, the
+  card showed the subtitle alone, and the follow-up search matched nothing. The
+  full title is now kept as the series key; titles that differ only by a
+  subtitle prefix are still merged when the library is grouped. Follow-up
+  matching also treats full-width and half-width wave dashes and question marks
+  as equal, because Amazon mixes both forms on the same page. Keys stored by
+  earlier versions are refreshed when the user runs a full library scan.
 
 Same Amazon.co.jp search URL pattern and triggers as before. No new permissions,
 domains, or stored data.
@@ -78,8 +80,8 @@ Source: https://github.com/harness17/kindle-series-sale-tracker (MIT)
 
 ## Checklist before submitting
 
-- [ ] The submitted ZIP matches the source at the commit tagged `v0.5.6`
-- [ ] `manifest.json` version field reads `0.5.6`
+- [ ] The submitted ZIP matches the source at the commit tagged `v0.5.7`
+- [ ] `manifest.json` version field reads `0.5.7`
 - [ ] No `CLAUDE_CODE_HANDOFF.md` or personal data files in the ZIP (excluded by build script)
 - [ ] `data_collection_permissions.required` is `["none"]` in `browser_specific_settings`
 - [ ] Source URL in the notes matches the public GitHub repository
